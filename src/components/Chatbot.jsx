@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
+import { askChatbot } from '../lib/api';
+import ReactMarkdown from 'react-markdown';
 
 export default function Chatbot({ fileIds }) {
   const [fileNames, setFileNames] = useState([]);
@@ -65,19 +67,33 @@ export default function Chatbot({ fileIds }) {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setBotLoading(true);
-
-    setTimeout(() => {
+  
+    try {
+      const data = await askChatbot({
+        fileIds,
+        question: input,
+        top_k: 3
+      });
       const botMessage = {
         id: messages.length + 2,
         sender: 'bot',
-        text: fileNames.length > 0
-          ? "I'm analyzing your selected lectures. In a real implementation, this would connect to your backend to provide actual answers about your specific lecture files."
-          : "This is a simulated response. In a real implementation, this would connect to your backend to provide actual answers about your lectures.",
+        text: data.answer || "Sorry, I couldn't get an answer.",
         timestamp: new Date()
       };
       setMessages(prev => [...prev, botMessage]);
-      setBotLoading(false);
-    }, 1500);
+    } catch (err) {
+      console.error(err);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: messages.length + 2,
+          sender: 'bot',
+          text: "Error contacting backend.",
+          timestamp: new Date()
+        }
+      ]);
+    }
+    setBotLoading(false);
   };
 
   const handleKeyDown = (e) => {
@@ -136,7 +152,11 @@ export default function Chatbot({ fileIds }) {
         {messages.map((msg) => (
           <div key={msg.id} className={`mb-3 flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`rounded-2xl shadow px-4 py-2 max-w-[70%] ${msg.sender === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}>
-              <div>{msg.text}</div>
+              <div>
+                {msg.sender === 'bot'
+                  ? <ReactMarkdown>{msg.text}</ReactMarkdown>
+                  : msg.text}
+              </div>
               <div className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-blue-200' : 'text-gray-400'}`}>
                 {formatTime(msg.timestamp)}
               </div>
