@@ -145,7 +145,7 @@ export default function Dashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 space-y-8 bg-gradient-to-br from-blue-50 to-white min-h-screen">
+      <main className="flex-1 p-8 space-y-8 bg-gradient-to-br from-blue-50 to-white min-h-screen text-gray-900">
         {/* Top bar (navbar feel) */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold text-blue-800">Teaching Analytics Dashboard</h1>

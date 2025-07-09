@@ -4,6 +4,7 @@ export async function POST(req) {
     "chucmotngaytotlanh.tuananh@gmail.com",
     "nguyentuananh.kmf@gmail.com",
     "mike.nguyen0105@gmail.com",
+    "nietest2025@gmail.com",
   ];
   if (allowedUsers.includes(email)) {
     return new Response(JSON.stringify({ allowed: true }), { status: 200 });
