@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { askChatbot } from '../lib/api';
 import ReactMarkdown from 'react-markdown';
+import Modal from './Modal';
 
 export default function Chatbot({ fileIds }) {
   const [fileNames, setFileNames] = useState([]);
@@ -12,6 +13,7 @@ export default function Chatbot({ fileIds }) {
   const [botLoading, setBotLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const router = useRouter();
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     async function fetchFileNames() {
@@ -159,12 +161,20 @@ export default function Chatbot({ fileIds }) {
             <small className="opacity-75">Ask questions about your lectures</small>
           </div>
         </div>
-        <button
-          className="bg-white text-blue-600 font-semibold px-4 py-2 rounded shadow hover:bg-blue-50 hover:cursor-pointer transition"
-          onClick={() => router.push('/dashboard')}
-        >
-          ← Back to Dashboard
-        </button>
+        <div className="flex gap-2">
+  <button
+    className="bg-white text-blue-600 font-semibold px-4 py-2 rounded shadow hover:bg-blue-50 hover:cursor-pointer transition shadow"
+    onClick={() => setShowModal(true)}
+  >
+    View Summary
+  </button>
+  <button
+    className="bg-white text-blue-600 font-semibold px-4 py-2 rounded shadow hover:bg-blue-50 hover:cursor-pointer transition"
+    onClick={() => router.push('/dashboard')}
+  >
+    ← Back to Dashboard
+  </button>
+</div>
       </div>
 
       {fileNames.length > 0 && (
@@ -248,6 +258,8 @@ export default function Chatbot({ fileIds }) {
           </small>
         </div>
       </div>
+      {/* Place Modal here, outside of other divs */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} />
     </div>
   );
 }
