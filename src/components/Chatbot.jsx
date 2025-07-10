@@ -67,20 +67,59 @@ export default function Chatbot({ fileIds }) {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setBotLoading(true);
-  
+
     try {
-      const data = await askChatbot({
+      const reader = await askChatbot({
         fileIds,
         question: input,
-        top_k: 3
+        // conversation_history: [] // add if you want to support history
       });
-      const botMessage = {
-        id: messages.length + 2,
-        sender: 'bot',
-        text: data.answer || "Sorry, I couldn't get an answer.",
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, botMessage]);
+      let botText = '';
+      let done = false;
+      let buffer = '';
+      let botMessageId = messages.length + 2;
+      // Add a placeholder bot message
+      setMessages(prev => [
+        ...prev,
+        {
+          id: botMessageId,
+          sender: 'bot',
+          text: '',
+          timestamp: new Date()
+        }
+      ]);
+      const decoder = new TextDecoder();
+      while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        done = streamDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          // Split on double newlines (SSE event boundary)
+          let eventBoundary;
+          while ((eventBoundary = buffer.indexOf('\n\n')) !== -1) {
+            const eventStr = buffer.slice(0, eventBoundary).trim();
+            buffer = buffer.slice(eventBoundary + 2);
+            if (eventStr.startsWith('data:')) {
+              const dataStr = eventStr.replace(/^data:\s*/, '');
+              if (dataStr) {
+                try {
+                  const data = JSON.parse(dataStr);
+                  if (data.type === 'content' && data.content) {
+                    botText += data.content;
+                    setMessages(prev => prev.map(msg =>
+                      msg.id === botMessageId ? { ...msg, text: botText } : msg
+                    ));
+                  }
+                  // Optionally handle metadata, complete, error, etc.
+                } catch (e) {
+                  // Ignore JSON parse errors for incomplete chunks
+                }
+              }
+            }
+          }
+        }
+      }
+      setBotLoading(false);
     } catch (err) {
       console.error(err);
       setMessages(prev => [
@@ -88,12 +127,12 @@ export default function Chatbot({ fileIds }) {
         {
           id: messages.length + 2,
           sender: 'bot',
-          text: "Error contacting backend.",
+          text: 'Error contacting backend.',
           timestamp: new Date()
         }
       ]);
+      setBotLoading(false);
     }
-    setBotLoading(false);
   };
 
   const handleKeyDown = (e) => {
@@ -107,7 +146,7 @@ export default function Chatbot({ fileIds }) {
     new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
       <div className="bg-blue-600 text-white p-4 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-white rounded-full flex items-center justify-center w-10 h-10 shadow-sm">

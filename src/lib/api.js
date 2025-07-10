@@ -1,17 +1,19 @@
 import { API_BASE_URL } from "./api-config";
 
-export async function askChatbot({ fileIds, question, top_k = 3 }) {
-  const response = await fetch(`${API_BASE_URL}/api/v1/chat`, {
+// Calls the new enhanced/stream API and returns a stream reader for the response
+export async function askChatbot({ fileIds, question, conversation_history = [] }) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/enhanced/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      file_id: fileIds.map(Number),
-      question,
-      top_k,
+      message: question,
+      file_ids: fileIds.map(Number),
+      conversation_history,
     }),
   });
   if (!response.ok) {
     throw new Error("Failed to get response from backend");
   }
-  return response.json();
+  // Return the ReadableStream reader for the caller to process
+  return response.body?.getReader();
 }
