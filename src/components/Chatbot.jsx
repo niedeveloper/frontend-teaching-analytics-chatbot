@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import { askChatbot } from '../lib/api';
 import ReactMarkdown from 'react-markdown';
 import Modal from './Modal';
+import { useUser } from '../context/UserContext';
 
 export default function Chatbot({ fileIds }) {
   const [fileNames, setFileNames] = useState([]);
@@ -14,6 +15,33 @@ export default function Chatbot({ fileIds }) {
   const messagesEndRef = useRef(null);
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
+  const { user } = useUser();
+
+  // Session info
+  const [sessionId] = useState(() => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()));
+  const [startedAt] = useState(() => new Date().toISOString());
+
+  // Save session to DB on unmount
+  useEffect(() => {
+    return () => {
+      const endedAt = new Date().toISOString();
+      supabase.from('chatbot_sessions').insert([
+        {
+          session_id: sessionId,
+          user_id: user?.user_id,
+          file_ids: fileIds,
+          conversation: messages,
+          started_at: startedAt,
+          ended_at: endedAt,
+        }
+      ]).then(({ error }) => {
+        if (error) {
+          console.error('Failed to save chat session:', error);
+        }
+      });
+    };
+    // eslint-disable-next-line
+  }, []);
 
   useEffect(() => {
     async function fetchFileNames() {

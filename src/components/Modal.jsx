@@ -7,8 +7,10 @@ const summaryData = [
   { name: 'Lecture', value: 40 },
   { name: 'Discussion', value: 25 },
   { name: 'Q&A', value: 15 },
-  { name: 'Group Work', value: 10 },
-  { name: 'Other', value: 10 },
+    { name: 'Group Work', value: 10 },
+    { name: 'Other', value: 10 },
+    { name: 'Group Work', value: 10 },
+    { name: 'Other', value: 10 }
 ];
 
 export default function Modal({ open, onClose }) {
@@ -34,11 +36,14 @@ export default function Modal({ open, onClose }) {
     }
 
     // Summary text
-    doc.text('Lecture: 40%', 10, 90);
-    doc.text('Discussion: 25%', 10, 100);
-    doc.text('Q&A: 15%', 10, 110);
-    doc.text('Group Work: 10%', 10, 120);
-    doc.text('Other: 10%', 10, 130);
+    doc.text('Teaching 1.1: 40%', 10, 90);
+    doc.text('Teaching 1.2: 25%', 10, 100);
+    doc.text('Teaching 1.3: 15%', 10, 110);
+    doc.text('Teaching 1.1: 40%', 10, 90);
+    doc.text('Teaching 1.2: 25%', 10, 100);
+    doc.text('Teaching 1.3: 15%', 10, 110);
+    doc.text('Teaching 1.2: 25%', 10, 100);
+    doc.text('Teaching 1.3: 15%', 10, 110);
 
     doc.save('summary.pdf');
   }
@@ -80,6 +85,10 @@ export default function Modal({ open, onClose }) {
             <li>• <b>Lecture:</b> 40%</li>
             <li>• <b>Discussion:</b> 25%</li>
             <li>• <b>Q&A:</b> 15%</li>
+            <li>• <b>Group Work:</b> 10%</li>
+            <li>• <b>Other:</b> 10%</li>
+            <li>• <b>Group Work:</b> 10%</li>
+            <li>• <b>Other:</b> 10%</li>
             <li>• <b>Group Work:</b> 10%</li>
             <li>• <b>Other:</b> 10%</li>
           </ul>
