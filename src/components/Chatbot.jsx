@@ -78,7 +78,6 @@ export default function Chatbot({ fileIds }) {
       });
       let botText = '';
       let done = false;
-      let buffer = '';
       let botMessageId = messages.length + 2;
       // Add a placeholder bot message
       setMessages(prev => [
@@ -95,30 +94,11 @@ export default function Chatbot({ fileIds }) {
         const { value, done: streamDone } = await reader.read();
         done = streamDone;
         if (value) {
-          buffer += decoder.decode(value, { stream: true });
-          // Split on double newlines (SSE event boundary)
-          let eventBoundary;
-          while ((eventBoundary = buffer.indexOf('\n\n')) !== -1) {
-            const eventStr = buffer.slice(0, eventBoundary).trim();
-            buffer = buffer.slice(eventBoundary + 2);
-            if (eventStr.startsWith('data:')) {
-              const dataStr = eventStr.replace(/^data:\s*/, '');
-              if (dataStr) {
-                try {
-                  const data = JSON.parse(dataStr);
-                  if (data.type === 'content' && data.content) {
-                    botText += data.content;
-                    setMessages(prev => prev.map(msg =>
-                      msg.id === botMessageId ? { ...msg, text: botText } : msg
-                    ));
-                  }
-                  // Optionally handle metadata, complete, error, etc.
-                } catch (e) {
-                  // Ignore JSON parse errors for incomplete chunks
-                }
-              }
-            }
-          }
+          const chunk = decoder.decode(value, { stream: true });
+          botText += chunk;
+          setMessages(prev => prev.map(msg =>
+            msg.id === botMessageId ? { ...msg, text: botText } : msg
+          ));
         }
       }
       setBotLoading(false);
