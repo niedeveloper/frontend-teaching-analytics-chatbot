@@ -21,27 +21,49 @@ export default function Chatbot({ fileIds }) {
   const [sessionId] = useState(() => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()));
   const [startedAt] = useState(() => new Date().toISOString());
 
-  // Save session to DB on unmount
+  const [fileSummaries, setFileSummaries] = useState([]);
+
+
+  // Ref to always have the latest messages
+  const messagesRef = useRef(messages);
   useEffect(() => {
-    return () => {
-      const endedAt = new Date().toISOString();
-      supabase.from('chatbot_sessions').insert([
-        {
-          session_id: sessionId,
-          user_id: user?.user_id,
-          file_ids: fileIds,
-          conversation: messages,
-          started_at: startedAt,
-          ended_at: endedAt,
-        }
-      ]).then(({ error }) => {
-        if (error) {
-          console.error('Failed to save chat session:', error);
-        }
-      });
-    };
-    // eslint-disable-next-line
-  }, []);
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Handler to save session and navigate
+  const handleBackToDashboard = async () => {
+    const hasUserMessage = messages.some(msg => msg.sender === 'user');
+    if (!hasUserMessage || !user?.email) {
+      router.push('/dashboard');
+      return;
+    }
+    const endedAt = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id')
+      .eq('email', user.email)
+      .single();
+    if (error || !data) {
+      console.error('Failed to fetch user_id:', error);
+      router.push('/dashboard');
+      return;
+    }
+    const user_id = data.user_id;
+    const { error: insertError } = await supabase.from('chatbot_sessions').insert([
+      {
+        session_id: sessionId,
+        user_id,
+        file_ids: fileIds,
+        conversation: messages,
+        started_at: startedAt,
+        ended_at: endedAt,
+      }
+    ]);
+    if (insertError) {
+      console.error('Failed to save chat session:', insertError);
+    }
+    router.push('/dashboard');
+  };
 
   useEffect(() => {
     async function fetchFileNames() {
@@ -175,6 +197,24 @@ export default function Chatbot({ fileIds }) {
   const formatTime = (timestamp) =>
     new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  const fetchFileSummaries = async () => {
+    if (!fileIds || fileIds.length === 0) return;
+    const { data, error } = await supabase
+      .from('files')
+      .select('file_id, stored_filename, data_summary')
+      .in('file_id', fileIds);
+    console.log('data', data);
+    if (!error && data) {
+      setFileSummaries(data);
+    }
+  };
+
+  // Call this when opening the modal:
+  const handleOpenModal = async () => {
+    await fetchFileSummaries();
+    setShowModal(true);
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
       <div className="bg-blue-600 text-white p-4 shadow-sm flex items-center justify-between">
@@ -192,13 +232,13 @@ export default function Chatbot({ fileIds }) {
         <div className="flex gap-2">
   <button
     className="bg-white text-blue-600 font-semibold px-4 py-2 rounded shadow hover:bg-blue-50 hover:cursor-pointer transition shadow"
-    onClick={() => setShowModal(true)}
+    onClick={handleOpenModal}
   >
     View Summary
   </button>
   <button
     className="bg-white text-blue-600 font-semibold px-4 py-2 rounded shadow hover:bg-blue-50 hover:cursor-pointer transition"
-    onClick={() => router.push('/dashboard')}
+    onClick={handleBackToDashboard}
   >
     ← Back to Dashboard
   </button>
@@ -287,7 +327,7 @@ export default function Chatbot({ fileIds }) {
         </div>
       </div>
       {/* Place Modal here, outside of other divs */}
-      <Modal open={showModal} onClose={() => setShowModal(false)} />
+      <Modal open={showModal} onClose={() => setShowModal(false)} fileSummaries={fileSummaries} />
     </div>
   );
 }
