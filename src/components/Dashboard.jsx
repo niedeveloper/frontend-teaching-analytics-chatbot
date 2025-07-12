@@ -194,7 +194,7 @@ export default function Dashboard() {
               onChange={e => setFilterClass(e.target.value)}
             />
             <button
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition shadow"
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition shadow hover:cursor-pointer"
               onClick={handleGoToChatbot}
               disabled={selectedFiles.length === 0}
             >
@@ -278,7 +278,7 @@ export default function Dashboard() {
                               const fileIds = item.files?.map(file => file.file_id) || [];
                               if (fileIds.length > 0) setSelectedFiles(fileIds);
                             }}
-                            className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-600 hover:text-white transition shadow"
+                            className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-600 hover:text-white transition shadow hover:cursor-pointer"
                           >
                             <Check className="w-3 h-3 inline mr-1" />
                             Select All

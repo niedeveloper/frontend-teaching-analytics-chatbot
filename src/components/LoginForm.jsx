@@ -79,7 +79,7 @@ export default function LoginForm() {
 
         <button
           onClick={handleGoogleLogin}
-          className="mt-4 w-full sm:w-auto inline-flex items-center justify-center bg-blue-600 hover:bg-blue-800 text-white font-semibold text-lg rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300"
+          className="mt-4 w-full sm:w-auto inline-flex items-center justify-center bg-blue-600 hover:bg-blue-800 text-white font-semibold text-lg rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300 hover:cursor-pointer"
         >
          <svg className="w-7 h-7 mr-4" viewBox="0 0 48 48">
         <g>
