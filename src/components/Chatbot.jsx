@@ -32,7 +32,7 @@ export default function Chatbot({ fileIds }) {
 
   // Handler to save session and navigate
   const handleBackToDashboard = async () => {
-    const hasUserMessage = messages.some(msg => msg.sender === 'user');
+    const hasUserMessage = messages.some(msg => msg.role === 'user');
     if (!hasUserMessage || !user?.email) {
       router.push('/dashboard');
       return;
@@ -49,12 +49,19 @@ export default function Chatbot({ fileIds }) {
       return;
     }
     const user_id = data.user_id;
+    
+    // Transform messages to API format for consistent storage
+    const conversationForStorage = messages.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
+    
     const { error: insertError } = await supabase.from('chatbot_sessions').insert([
       {
         session_id: sessionId,
         user_id,
         file_ids: fileIds,
-        conversation: messages,
+        conversation: conversationForStorage,
         started_at: startedAt,
         ended_at: endedAt,
       }
@@ -98,8 +105,8 @@ export default function Chatbot({ fileIds }) {
       setMessages([
         {
           id: 1,
-          sender: 'bot',
-          text: fileNames.length > 0
+          role: 'assistant',
+          content: fileNames.length > 0
             ? `Hello! I'm your Teaching Analytics Chatbot. I can see you've selected these files to analyze: "${fileNames.join(', ')}". You can ask me anything about these lectures!`
             : "Hello! I'm your Teaching Analytics Chatbot. How can I help you with your lecture questions today?",
           timestamp: new Date()
@@ -112,8 +119,8 @@ export default function Chatbot({ fileIds }) {
     if (!input.trim()) return;
     const userMessage = {
       id: messages.length + 1,
-      sender: 'user',
-      text: input,
+      role: 'user',
+      content: input,
       timestamp: new Date()
     };
     setMessages(prev => [...prev, userMessage]);
@@ -121,10 +128,18 @@ export default function Chatbot({ fileIds }) {
     setBotLoading(true);
 
     try {
+      // Format conversation history for API (now no transformation needed)
+      const conversationHistory = messages
+        .filter(msg => msg.role !== 'assistant' || msg.content.trim()) // Exclude empty assistant messages
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }));
+
       const reader = await askChatbot({
         fileIds,
         question: input,
-        // conversation_history: [] // add if you want to support history
+        conversation_history: conversationHistory
       });
       let botText = '';
       let done = false;
@@ -134,8 +149,8 @@ export default function Chatbot({ fileIds }) {
         ...prev,
         {
           id: botMessageId,
-          sender: 'bot',
-          text: '',
+          role: 'assistant',
+          content: '',
           timestamp: new Date()
         }
       ]);
@@ -147,7 +162,7 @@ export default function Chatbot({ fileIds }) {
           const chunk = decoder.decode(value, { stream: true });
           botText += chunk;
           setMessages(prev => prev.map(msg =>
-            msg.id === botMessageId ? { ...msg, text: botText } : msg
+            msg.id === botMessageId ? { ...msg, content: botText } : msg
           ));
         }
       }
@@ -158,8 +173,8 @@ export default function Chatbot({ fileIds }) {
         ...prev,
         {
           id: messages.length + 2,
-          sender: 'bot',
-          text: 'Error contacting backend.',
+          role: 'assistant',
+          content: 'Error contacting backend.',
           timestamp: new Date()
         }
       ]);
@@ -247,14 +262,14 @@ export default function Chatbot({ fileIds }) {
 
       <div className="flex-1 overflow-auto p-4 bg-white">
         {messages.map((msg) => (
-          <div key={msg.id} className={`mb-3 flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`rounded-2xl shadow px-4 py-2 max-w-[70%] ${msg.sender === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}>
+          <div key={msg.id} className={`mb-3 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`rounded-2xl shadow px-4 py-2 max-w-[70%] ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}>
               <div>
-                {msg.sender === 'bot'
-                  ? <ReactMarkdown>{msg.text}</ReactMarkdown>
-                  : msg.text}
+                {msg.role === 'assistant'
+                  ? <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  : msg.content}
               </div>
-              <div className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-blue-200' : 'text-gray-400'}`}>
+              <div className={`text-xs mt-1 ${msg.role === 'user' ? 'text-blue-200' : 'text-gray-400'}`}>
                 {formatTime(msg.timestamp)}
               </div>
             </div>
