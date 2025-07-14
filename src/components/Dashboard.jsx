@@ -7,18 +7,21 @@ import firebaseApp from '../lib/firebase';
 import { supabase } from '../lib/supabaseClient';
 import { LogOut, Bot, LayoutDashboard, FileText, Folder, Check } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+// import ReactWordcloud from 'react-wordcloud';
+import ReactD3Cloud from 'react-d3-cloud';
 
 export default function Dashboard() {
   const { user, setUser } = useUser();
   const router = useRouter();
   const [userData, setUserData] = useState(null);
-  const [summary, setSummary] = useState({ classes: 0, lectures: 0 });
+  const [summary, setSummary] = useState({ classes: 0, lectures: 0, chatSessions: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tableData, setTableData] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [filterClass, setFilterClass] = useState('');
   const [tableLoading, setTableLoading] = useState(false);
+  const [wordCloudWords, setWordCloudWords] = useState([]);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -48,12 +51,55 @@ export default function Dashboard() {
           .select('file_id, classes!inner(user_id)')
           .eq('classes.user_id', userId);
 
+        // Get chat sessions count for this user using count()
+        console.log('DEBUG: userId =', userId);
+        
+        const { count: chatSessionsCount, error: chatSessionsError } = await supabase
+          .from('chatbot_sessions')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId);
+
+        console.log('DEBUG: chatSessionsCount =', chatSessionsCount);
+        console.log('DEBUG: chatSessionsError =', chatSessionsError);
+
+        // Debug: Check if there are any chat sessions at all
+        const { count: totalChatSessions, error: totalError } = await supabase
+          .from('chatbot_sessions')
+          .select('*', { count: 'exact', head: true });
+        
+        console.log('DEBUG: totalChatSessions =', totalChatSessions);
+        console.log('DEBUG: totalError =', totalError);
+
+        // Debug: Check what user_ids exist in chatbot_sessions
+        const { data: allSessions, error: allSessionsError } = await supabase
+          .from('chatbot_sessions')
+          .select('user_id, session_id, started_at')
+          .limit(5);
+        
+        console.log('DEBUG: allSessions =', allSessions);
+        console.log('DEBUG: allSessionsError =', allSessionsError);
+
+        // Debug: Check specifically for user_id = 3
+        const { data: user3Sessions, error: user3Error } = await supabase
+          .from('chatbot_sessions')
+          .select('*')
+          .eq('user_id', 3);
+        
+        console.log('DEBUG: user3Sessions =', user3Sessions);
+        console.log('DEBUG: user3Error =', user3Error);
+
+        if (chatSessionsError) {
+          console.error('Error fetching chat sessions count:', chatSessionsError);
+        }
+
         setSummary({
           classes: classesData?.length || 0,
           lectures: lecturesData?.length || 0,
+          chatSessions: chatSessionsCount || 0,
         });
 
         await fetchTableData(userId);
+        await fetchWordCloudData(userId);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -120,6 +166,43 @@ export default function Dashboard() {
     { style: 'Other', percentage: 10 },
   ];
 
+  const fetchWordCloudData = async (userId) => {
+    if (!userId) return;
+    const { data, error } = await supabase
+      .from('chatbot_sessions')
+      .select('conversation')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Failed to fetch conversation history:', error);
+      return;
+    }
+
+    // Combine all conversation messages into one string
+    const allText = (data || [])
+      .flatMap(session => session.conversation.map(msg => msg.content))
+      .join(' ')
+      .toLowerCase();
+
+    // Simple word frequency count (excluding common stopwords)
+    const stopwords = new Set(['the', 'and', 'to', 'of', 'a', 'in', 'is', 'it', 'for', 'on', 'that', 'with', 'as', 'was', 'at', 'by', 'an', 'be', 'this', 'are', 'from', 'or', 'but', 'not', 'have', 'has', 'had', 'you', 'i', 'we', 'they', 'he', 'she', 'his', 'her', 'their', 'my', 'me', 'our', 'your', 'so', 'if', 'can', 'will', 'just', 'do', 'did', 'does', 'about', 'what', 'which', 'who', 'how', 'when', 'where', 'why', 'all', 'any', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'too', 'very', 's', 't', 'll', 'm', 're', 've', 'd', 'o', 'y']);
+
+    const wordCounts = {};
+    allText.split(/\s+/).forEach(word => {
+      const clean = word.replace(/[^a-zA-Z]/g, '');
+      if (clean && !stopwords.has(clean) && clean.length > 2) {
+        wordCounts[clean] = (wordCounts[clean] || 0) + 1;
+      }
+    });
+
+    // Format for react-d3-cloud, filter and sort for top 40
+    const words = Object.entries(wordCounts)
+      .map(([word, freq]) => ({ text: word, value: freq }))
+      .filter(w => w.text.length > 2);
+    const sortedWords = words.sort((a, b) => b.value - a.value).slice(0, 40);
+    setWordCloudWords(sortedWords);
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (error) return <div className="text-red-500">{error}</div>;
 
@@ -163,24 +246,27 @@ export default function Dashboard() {
             <p className="text-gray-500">Lectures</p>
           </div>
           <div className="bg-white rounded-2xl shadow-lg border border-blue-100 p-6 text-center transition hover:scale-105">
-            <FileText className="text-green-500 w-8 h-8 mx-auto mb-2" />
-            <h2 className="text-3xl font-bold text-green-600">N</h2>
+            <Bot className="text-purple-500 w-8 h-8 mx-auto mb-2" />
+            <h2 className="text-3xl font-bold text-purple-600">{summary.chatSessions}</h2>
             <p className="text-gray-500">Chat Sessions</p>
           </div>
         </div>
 
-        {/* Chart Section */}
-        <div className="bg-white rounded-2xl shadow-lg border border-blue-100 p-6">
-          <h3 className="text-blue-700 font-semibold mb-4">Teaching Style Overview</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={teachingStyleData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="style" />
-              <YAxis />
-              <Tooltip />
-              {/* <Bar dataKey="percentage" fill="#2563eb"/> */}
-            </BarChart>
-          </ResponsiveContainer>
+        {/* Word Cloud Section */}
+        <div className="bg-white rounded-2xl shadow-lg border border-blue-100 p-6 flex flex-col items-center">
+          <h3 className="text-blue-700 font-semibold mb-4">Teaching Style Word Cloud</h3>
+          {wordCloudWords.length > 0 ? (
+            <div style={{ width: 600, height: 350 }}>
+              <ReactD3Cloud
+                data={wordCloudWords}
+                fontSizeMapper={word => Math.log2(word.value + 1) * 25}
+                width={600}
+                height={350}
+              />
+            </div>
+          ) : (
+            <div className="text-gray-400">No conversation data yet.</div>
+          )}
         </div>
 
         {/* Class + File Table */}
