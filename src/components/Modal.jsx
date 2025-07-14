@@ -40,16 +40,16 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
     doc.save('summary.pdf');
   }
 
-  if (!open) return null;
-  return (
+    if (!open) return null;
+    return (
     <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-white/30 px-2 py-4 sm:px-0">
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-8 max-w-lg w-full relative mx-auto overflow-y-auto max-h-[90vh]">
-        <button
-          className="absolute top-2 right-2 text-gray-500 hover:text-blue-600"
-          onClick={onClose}
-        >
-          ×
-        </button>
+          <button
+            className="absolute top-2 right-2 text-gray-500 hover:text-blue-600"
+            onClick={onClose}
+          >
+            ×
+          </button>
         <div className="mb-6">
           <h2 className="text-xl font-bold mb-2">Teaching Analytics Summary</h2>
           <p className="mb-4 text-gray-700">
@@ -123,7 +123,7 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
             Download PDF
           </button>
         </div>
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
