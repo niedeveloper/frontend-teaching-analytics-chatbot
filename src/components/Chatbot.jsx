@@ -1,16 +1,16 @@
-import { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '../lib/supabaseClient';
-import { askChatbot } from '../lib/api';
-import ReactMarkdown from 'react-markdown';
-import Modal from './Modal';
-import { useUser } from '../context/UserContext';
+import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "../lib/supabaseClient";
+import { askChatbot } from "../lib/api";
+import ReactMarkdown from "react-markdown";
+import Modal from "./Modal";
+import { useUser } from "../context/UserContext";
 
 export default function Chatbot({ fileIds }) {
   const [fileNames, setFileNames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [botLoading, setBotLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const router = useRouter();
@@ -18,11 +18,12 @@ export default function Chatbot({ fileIds }) {
   const { user } = useUser();
 
   // Session info
-  const [sessionId] = useState(() => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()));
+  const [sessionId] = useState(() =>
+    crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
+  );
   const [startedAt] = useState(() => new Date().toISOString());
 
   const [fileSummaries, setFileSummaries] = useState([]);
-
 
   // Ref to always have the latest messages
   const messagesRef = useRef(messages);
@@ -32,44 +33,46 @@ export default function Chatbot({ fileIds }) {
 
   // Handler to save session and navigate
   const handleBackToDashboard = async () => {
-    const hasUserMessage = messages.some(msg => msg.role === 'user');
+    const hasUserMessage = messages.some((msg) => msg.role === "user");
     if (!hasUserMessage || !user?.email) {
-      router.push('/dashboard');
+      router.push("/dashboard");
       return;
     }
     const endedAt = new Date().toISOString();
     const { data, error } = await supabase
-      .from('users')
-      .select('user_id')
-      .eq('email', user.email)
+      .from("users")
+      .select("user_id")
+      .eq("email", user.email)
       .single();
     if (error || !data) {
-      console.error('Failed to fetch user_id:', error);
-      router.push('/dashboard');
+      console.error("Failed to fetch user_id:", error);
+      router.push("/dashboard");
       return;
     }
     const user_id = data.user_id;
-    
+
     // Transform messages to API format for consistent storage
-    const conversationForStorage = messages.map(msg => ({
+    const conversationForStorage = messages.map((msg) => ({
       role: msg.role,
-      content: msg.content
+      content: msg.content,
     }));
-    
-    const { error: insertError } = await supabase.from('chatbot_sessions').insert([
-      {
-        session_id: sessionId,
-        user_id,
-        file_ids: fileIds,
-        conversation: conversationForStorage,
-        started_at: startedAt,
-        ended_at: endedAt,
-      }
-    ]);
+
+    const { error: insertError } = await supabase
+      .from("chatbot_sessions")
+      .insert([
+        {
+          session_id: sessionId,
+          user_id,
+          file_ids: fileIds,
+          conversation: conversationForStorage,
+          started_at: startedAt,
+          ended_at: endedAt,
+        },
+      ]);
     if (insertError) {
-      console.error('Failed to save chat session:', insertError);
+      console.error("Failed to save chat session:", insertError);
     }
-    router.push('/dashboard');
+    router.push("/dashboard");
   };
 
   useEffect(() => {
@@ -81,13 +84,13 @@ export default function Chatbot({ fileIds }) {
       }
       setLoading(true);
       const { data, error } = await supabase
-        .from('files')
-        .select('file_id, stored_filename')
-        .in('file_id', fileIds);
+        .from("files")
+        .select("file_id, stored_filename")
+        .in("file_id", fileIds);
       if (error) {
         setFileNames([]);
       } else {
-        setFileNames(data.map(f => f.stored_filename));
+        setFileNames(data.map((f) => f.stored_filename));
       }
       setLoading(false);
     }
@@ -96,7 +99,7 @@ export default function Chatbot({ fileIds }) {
 
   useEffect(() => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
 
@@ -105,12 +108,15 @@ export default function Chatbot({ fileIds }) {
       setMessages([
         {
           id: 1,
-          role: 'assistant',
-          content: fileNames.length > 0
-            ? `Hello! I'm your Teaching Analytics Chatbot. I can see you've selected these files to analyze: "${fileNames.join(', ')}". You can ask me anything about these lectures!`
-            : "Hello! I'm your Teaching Analytics Chatbot. How can I help you with your lecture questions today?",
-          timestamp: new Date()
-        }
+          role: "assistant",
+          content:
+            fileNames.length > 0
+              ? `Hello! I'm your Teaching Analytics Chatbot. I can see you've selected these files to analyze: "${fileNames.join(
+                  ", "
+                )}". You can ask me anything about these lectures!`
+              : "Hello! I'm your Teaching Analytics Chatbot. How can I help you with your lecture questions today?",
+          timestamp: new Date(),
+        },
       ]);
     }
   }, [loading, fileNames, messages.length]);
@@ -119,40 +125,40 @@ export default function Chatbot({ fileIds }) {
     if (!input.trim()) return;
     const userMessage = {
       id: messages.length + 1,
-      role: 'user',
+      role: "user",
       content: input,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
     setBotLoading(true);
 
     try {
       // Format conversation history for API (now no transformation needed)
       const conversationHistory = messages
-        .filter(msg => msg.role !== 'assistant' || msg.content.trim()) // Exclude empty assistant messages
-        .map(msg => ({
+        .filter((msg) => msg.role !== "assistant" || msg.content.trim()) // Exclude empty assistant messages
+        .map((msg) => ({
           role: msg.role,
-          content: msg.content
+          content: msg.content,
         }));
 
       const reader = await askChatbot({
         fileIds,
         question: input,
-        conversation_history: conversationHistory
+        conversation_history: conversationHistory,
       });
-      let botText = '';
+      let botText = "";
       let done = false;
       let botMessageId = messages.length + 2;
       // Add a placeholder bot message
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
         {
           id: botMessageId,
-          role: 'assistant',
-          content: '',
-          timestamp: new Date()
-        }
+          role: "assistant",
+          content: "",
+          timestamp: new Date(),
+        },
       ]);
       const decoder = new TextDecoder();
       while (!done) {
@@ -161,44 +167,49 @@ export default function Chatbot({ fileIds }) {
         if (value) {
           const chunk = decoder.decode(value, { stream: true });
           botText += chunk;
-          setMessages(prev => prev.map(msg =>
-            msg.id === botMessageId ? { ...msg, content: botText } : msg
-          ));
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === botMessageId ? { ...msg, content: botText } : msg
+            )
+          );
         }
       }
       setBotLoading(false);
     } catch (err) {
       console.error(err);
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
         {
           id: messages.length + 2,
-          role: 'assistant',
-          content: 'Error contacting backend.',
-          timestamp: new Date()
-        }
+          role: "assistant",
+          content: "Error contacting backend.",
+          timestamp: new Date(),
+        },
       ]);
       setBotLoading(false);
     }
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
 
   const formatTime = (timestamp) =>
-    new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    new Date(timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
   const fetchFileSummaries = async () => {
     if (!fileIds || fileIds.length === 0) return;
     const { data, error } = await supabase
-      .from('files')
-      .select('file_id, stored_filename, data_summary')
-      .in('file_id', fileIds);
-    console.log('data', data);
+      .from("files")
+      .select("file_id, stored_filename, data_summary")
+      .in("file_id", fileIds);
+    console.log("data", data);
     if (!error && data) {
       setFileSummaries(data);
     }
@@ -215,46 +226,66 @@ export default function Chatbot({ fileIds }) {
       <div className="bg-blue-600 text-white p-4 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-white rounded-full flex items-center justify-center w-10 h-10 shadow-sm">
-            <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <svg
+              className="w-6 h-6 text-blue-600"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
               <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 14.93V19a1 1 0 11-2 0v-2.07A8.001 8.001 0 014 12a8 8 0 0116 0 8.001 8.001 0 01-7 6.93z" />
             </svg>
           </div>
           <div>
             <h5 className="mb-0 font-bold">Teaching Analytics Chatbot</h5>
-            <small className="opacity-75">Ask questions about your lectures</small>
+            <small className="opacity-75">
+              Ask questions about your lectures
+            </small>
           </div>
         </div>
         <div className="flex gap-2">
-  <button
-    className="bg-white text-blue-600 font-semibold px-4 py-2 rounded shadow hover:bg-blue-50 hover:cursor-pointer transition shadow"
-    onClick={handleOpenModal}
-  >
-    View Summary
-  </button>
-  <button
-    className="bg-white text-blue-600 font-semibold px-4 py-2 rounded shadow hover:bg-blue-50 hover:cursor-pointer transition"
-    onClick={handleBackToDashboard}
-  >
-    ← Back to Dashboard
-  </button>
-</div>
+          <button
+            className="bg-white text-blue-600 font-semibold px-4 py-2 rounded shadow hover:bg-blue-50 hover:cursor-pointer transition shadow"
+            onClick={handleOpenModal}
+          >
+            View Summary
+          </button>
+          <button
+            className="bg-white text-blue-600 font-semibold px-4 py-2 rounded shadow hover:bg-blue-50 hover:cursor-pointer transition"
+            onClick={handleBackToDashboard}
+          >
+            ← Back to Dashboard
+          </button>
+        </div>
       </div>
 
       {fileNames.length > 0 && (
         <div className="p-4 bg-blue-50 border-b">
           <div className="text-blue-700 font-semibold mb-1">
-            <svg className="inline w-5 h-5 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <svg
+              className="inline w-5 h-5 mr-1"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
               <path d="M9 17v-2a4 4 0 014-4h3a4 4 0 014 4v2" />
               <circle cx="9" cy="7" r="4" />
             </svg>
             Selected Files for Analysis
           </div>
           <div className="text-sm mb-2">
-            You've selected <strong>{fileNames.length} file(s)</strong>. You can now ask me anything about these lectures!
+            You've selected <strong>{fileNames.length} file(s)</strong>. You can
+            now ask me anything about these lectures!
           </div>
           <div className="flex flex-wrap gap-2">
             {fileNames.map((name, idx) => (
-              <span key={idx} className="bg-blue-600 text-white rounded px-2 py-1 text-xs">{name}</span>
+              <span
+                key={idx}
+                className="bg-blue-600 text-white rounded px-2 py-1 text-xs"
+              >
+                {name}
+              </span>
             ))}
           </div>
         </div>
@@ -262,14 +293,31 @@ export default function Chatbot({ fileIds }) {
 
       <div className="flex-1 overflow-auto p-4 bg-white">
         {messages.map((msg) => (
-          <div key={msg.id} className={`mb-3 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`rounded-2xl shadow px-4 py-2 max-w-[70%] ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}>
+          <div
+            key={msg.id}
+            className={`mb-3 flex ${
+              msg.role === "user" ? "justify-end" : "justify-start"
+            }`}
+          >
+            <div
+              className={`rounded-2xl shadow px-4 py-2 max-w-[70%] ${
+                msg.role === "user"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-800"
+              }`}
+            >
               <div>
-                {msg.role === 'assistant'
-                  ? <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  : msg.content}
+                {msg.role === "assistant" ? (
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                ) : (
+                  msg.content
+                )}
               </div>
-              <div className={`text-xs mt-1 ${msg.role === 'user' ? 'text-blue-200' : 'text-gray-400'}`}>
+              <div
+                className={`text-xs mt-1 ${
+                  msg.role === "user" ? "text-blue-200" : "text-gray-400"
+                }`}
+              >
                 {formatTime(msg.timestamp)}
               </div>
             </div>
@@ -278,9 +326,24 @@ export default function Chatbot({ fileIds }) {
         {botLoading && (
           <div className="mb-3 flex justify-start">
             <div className="rounded-2xl shadow px-4 py-2 max-w-[70%] bg-gray-100 text-gray-800 flex items-center gap-2">
-              <svg className="w-4 h-4 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+              <svg
+                className="w-4 h-4 animate-spin text-blue-600"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v8z"
+                ></path>
               </svg>
               Typing...
             </div>
@@ -290,14 +353,22 @@ export default function Chatbot({ fileIds }) {
       </div>
 
       <div className="p-4 border-t bg-white">
-        <form className="flex gap-2" onSubmit={e => { e.preventDefault(); handleSend(); }}>
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSend();
+          }}
+        >
           <textarea
             className="flex-1 border rounded-2xl px-4 py-2 shadow-sm resize-none focus:outline-blue-400"
-            placeholder={fileNames.length > 0
-              ? "Ask me anything about your selected lectures..."
-              : "Type your message here..."}
+            placeholder={
+              fileNames.length > 0
+                ? "Ask me anything about your selected lectures..."
+                : "Type your message here..."
+            }
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
             style={{ minHeight: 40, maxHeight: 120 }}
@@ -322,7 +393,11 @@ export default function Chatbot({ fileIds }) {
         </div>
       </div>
       {/* Place Modal here, outside of other divs */}
-      <Modal open={showModal} onClose={() => setShowModal(false)} fileSummaries={fileSummaries} />
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        fileSummaries={fileSummaries}
+      />
     </div>
   );
 }
