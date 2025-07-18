@@ -209,10 +209,7 @@ export default function Chatbot({ fileIds }) {
       .from("files")
       .select("file_id, stored_filename, data_summary")
       .in("file_id", fileIds);
-    console.log("data", data);
-    if (!error && data) {
-      setFileSummaries(data);
-    }
+    if (!error && data) setFileSummaries(data);
   };
 
   // Call this when opening the modal:
