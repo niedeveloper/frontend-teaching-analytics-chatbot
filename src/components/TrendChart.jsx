@@ -2,56 +2,299 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useUser } from "../context/UserContext";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from "recharts";
+
+// Define all teaching areas (in order)
+const TEACHING_AREA_CODES = [
+  "1.1 Establishing Interaction and rapport",
+  "1.2 Setting and Maintaining Rules and Routine",
+  "3.1 Activating prior knowledge",
+  "3.2 Motivating learners for learning engagement",
+  "3.3 Using Questions to deepen learning",
+  "3.4 Facilitating collaborative learning",
+  "3.5 Concluding the lesson",
+  "4.1 Checking for understanding and providing feedback",
+];
+
+// Nice color palette for lines & checkboxes
+const LINE_COLORS = [
+  "#22c55e",
+  "#2563eb",
+  "#f59e42",
+  "#e11d48",
+  "#a21caf",
+  "#0ea5e9",
+  "#facc15",
+  "#64748b",
+];
+
+function parseTeachingAreaStats(summary) {
+  const lines = (summary || "").split("\n");
+  const stats = {};
+  let inStats = false;
+  for (const line of lines) {
+    if (line.startsWith("TEACHING AREA STATISTICS:")) {
+      inStats = true;
+      continue;
+    }
+    if (inStats) {
+      if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) break;
+      const match = line.match(
+        /^([^.]+\.\d [^:]+): (\d+) utterances \(([\d.]+)%\)/
+      );
+      if (match) {
+        stats[match[1].trim()] = {
+          value: parseInt(match[2], 10),
+          percent: parseFloat(match[3]),
+        };
+      }
+    }
+  }
+  TEACHING_AREA_CODES.forEach((code) => {
+    if (!stats[code]) stats[code] = { value: 0, percent: 0 };
+  });
+  return stats;
+}
+function getStatValue(stat, mode) {
+  return mode === "percent" ? stat?.percent || 0 : stat?.value || 0;
+}
+function stripXlsx(filename) {
+  return (filename || "").replace(/\.xlsx$/i, "");
+}
 
 export default function TrendChart() {
-  const [analyticsUrl, setAnalyticsUrl] = useState(null);
-  const [loading, setLoading] = useState(true);
   const { user } = useUser();
+  const [fileSummaries, setFileSummaries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [displayMode, setDisplayMode] = useState("percent");
+  const [selectedAreas, setSelectedAreas] = useState([...TEACHING_AREA_CODES]);
+
   useEffect(() => {
-    async function fetchAnalyticsUrl() {
-      if (!user?.email) return setLoading(false);
-      const { data, error } = await supabase
+    async function fetchFileSummaries() {
+      setLoading(true);
+      if (!user?.email) {
+        setFileSummaries([]);
+        setLoading(false);
+        return;
+      }
+      // 1. Get user_id for this user
+      const { data: userRows, error: userError } = await supabase
         .from("users")
-        .select("data_analytics_url")
+        .select("user_id")
         .eq("email", user.email)
         .single();
-      if (!error && data && data.data_analytics_url) {
-        setAnalyticsUrl(data.data_analytics_url);
+      if (userError || !userRows) {
+        setFileSummaries([]);
+        setLoading(false);
+        return;
       }
+      const userId = userRows.user_id;
+
+      // 2. Get all class_ids for this user
+      const { data: classRows, error: classError } = await supabase
+        .from("classes")
+        .select("class_id")
+        .eq("user_id", userId);
+      if (classError || !classRows || classRows.length === 0) {
+        setFileSummaries([]);
+        setLoading(false);
+        return;
+      }
+      const classIds = classRows.map((c) => c.class_id);
+
+      // 3. Get all files where class_id in user's classes
+      const { data: fileRows, error: fileError } = await supabase
+        .from("files")
+        .select("file_id, stored_filename, data_summary")
+        .in("class_id", classIds)
+        .order("lesson_date", { ascending: true });
+      if (fileError || !fileRows) {
+        setFileSummaries([]);
+        setLoading(false);
+        return;
+      }
+      setFileSummaries(fileRows);
       setLoading(false);
     }
-    fetchAnalyticsUrl();
+    fetchFileSummaries();
   }, [user]);
+
+  // Chart data (lesson = x axis, teaching area series)
+  const chartData = fileSummaries.map((file, idx) => {
+    const stats = parseTeachingAreaStats(
+      (file.data_summary || "").replace(/\\n/g, "\n")
+    );
+    const entry = {
+      lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`),
+    };
+    TEACHING_AREA_CODES.forEach((code) => {
+      entry[code] = getStatValue(stats[code], displayMode);
+    });
+    return entry;
+  });
+
+  // Toggle a single teaching area
+  function handleAreaToggle(area) {
+    setSelectedAreas((prev) =>
+      prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]
+    );
+  }
+
+  // Select all/none controls
+  function handleSelectAll() {
+    setSelectedAreas([...TEACHING_AREA_CODES]);
+  }
+  function handleClearAll() {
+    setSelectedAreas([]);
+  }
 
   return (
     <section className="rounded-2xl shadow-lg bg-white/90 border border-blue-100 px-2 md:px-6 py-6 flex flex-col items-center">
       <h2 className="text-indigo-700 font-semibold mb-4 text-lg md:text-xl">
-        Teaching Style Analytics
+        Utterances per Teaching Area Across Lessons
       </h2>
-      <div className="w-full flex justify-center">
-        <div className="w-full" style={{ aspectRatio: "16/9", minHeight: 350 }}>
-          {!loading && analyticsUrl ? (
-            <iframe
-              src={analyticsUrl}
-              width="100%"
-              height="100%"
-              style={{
-                border: 0,
-                borderRadius: 16,
-                width: "100%",
-                height: "100%",
-                minHeight: 350,
-                display: "block",
-              }}
-              allowFullScreen
-              sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-              title="Teaching Style Analytics"
+
+      {/* Area toggles */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+        <button
+          onClick={handleSelectAll}
+          className="px-2 py-1 rounded bg-blue-100 text-blue-700 font-semibold text-xs hover:bg-blue-200"
+          type="button"
+        >
+          Select All
+        </button>
+        <button
+          onClick={handleClearAll}
+          className="px-2 py-1 rounded bg-gray-100 text-gray-700 font-semibold text-xs hover:bg-gray-200"
+          type="button"
+        >
+          Clear All
+        </button>
+        {TEACHING_AREA_CODES.map((code, idx) => (
+          <label
+            key={code}
+            className="flex items-center gap-1 text-xs font-bold cursor-pointer select-none"
+            style={{ color: LINE_COLORS[idx % LINE_COLORS.length] }}
+          >
+            <input
+              type="checkbox"
+              checked={selectedAreas.includes(code)}
+              onChange={() => handleAreaToggle(code)}
+              className="accent-current"
             />
-          ) : (
-            <div className="flex items-center justify-center h-full w-full text-gray-400">
-              {loading ? "Loading chart..." : "No analytics URL found."}
+            {code.split(" ")[0]}
+          </label>
+        ))}
+      </div>
+
+      {/* Toggle for percent/utterances */}
+      <div className="flex justify-center mb-4">
+        <div className="inline-flex items-center gap-4 bg-gray-100 px-4 py-2 rounded shadow text-base">
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="radio"
+              name="displayMode"
+              value="percent"
+              checked={displayMode === "percent"}
+              onChange={() => setDisplayMode("percent")}
+              className="mr-1 accent-blue-600"
+            />
+            % of Utterances
+          </label>
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="radio"
+              name="displayMode"
+              value="value"
+              checked={displayMode === "value"}
+              onChange={() => setDisplayMode("value")}
+              className="mr-1 accent-blue-600"
+            />
+            Number of Utterances
+          </label>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="w-full h-[500px] bg-white border rounded-lg">
+        {loading ? (
+          <div className="flex items-center justify-center h-full w-full text-gray-400">
+            Loading chart...
+          </div>
+        ) : fileSummaries.length === 0 ? (
+          <div className="flex items-center justify-center h-full w-full text-gray-400">
+            No data found.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={chartData}
+              margin={{ top: 20, right: 120, left: 60, bottom: 10 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="lesson"
+                tick={{ fontSize: 12, fontWeight: 600, dy: 16 }}
+                height={40}
+                interval={0}
+              />
+              <YAxis
+                tickFormatter={(val) =>
+                  displayMode === "percent" ? `${val}%` : val
+                }
+              />
+              <Tooltip
+                formatter={(val) =>
+                  displayMode === "percent" ? `${val}%` : val
+                }
+              />
+              {/* Only render checked lines */}
+              {TEACHING_AREA_CODES.filter((code) =>
+                selectedAreas.includes(code)
+              ).map((code, idx) => (
+                <Line
+                  key={code}
+                  type="linear"
+                  dataKey={code}
+                  name={code.split(" ")[0]}
+                  stroke={LINE_COLORS[idx % LINE_COLORS.length]}
+                  strokeWidth={3}
+                  dot={{
+                    r: 6,
+                    stroke: LINE_COLORS[idx % LINE_COLORS.length],
+                    strokeWidth: 2,
+                    fill: "#fff",
+                  }}
+                  activeDot={{ r: 8 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+      {/* Full Text Legend */}
+      <div className="w-full mt-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+          {TEACHING_AREA_CODES.map((code, idx) => (
+            <div key={code} className="flex items-center gap-2 text-sm">
+              <span
+                className="inline-block w-4 h-4 rounded"
+                style={{ background: LINE_COLORS[idx % LINE_COLORS.length] }}
+              />
+              <span>
+                <strong>{code.split(" ")[0]}:</strong>{" "}
+                {code.substring(code.indexOf(" ") + 1)}
+              </span>
             </div>
-          )}
+          ))}
         </div>
       </div>
     </section>
