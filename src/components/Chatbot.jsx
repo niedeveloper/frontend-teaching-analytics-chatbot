@@ -1,10 +1,102 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
-import { askChatbot } from "../lib/api";
+import { askChatbot, fetchLessonSummaries } from "../lib/api";
 import ReactMarkdown from "react-markdown";
 import Modal from "./Modal";
 import { useUser } from "../context/UserContext";
+import React from "react";
+
+// Inline summary table component for chat
+function InlineSummaryTable({ fileSummaries }) {
+  // Reuse Modal's parsing logic
+  const TEACHING_AREA_CODES = [
+    "1.2 Setting and Maintaining Rules and Routine",
+    "4.1 Checking for understanding and providing feedback",
+    "3.2 Motivating learners for learning engagement",
+    "1.1 Establishing Interaction and rapport",
+    "3.3 Using Questions to deepen learning",
+    "3.1 Activating prior knowledge",
+    "3.4 Facilitating collaborative learning",
+    "3.5 Concluding the lesson",
+  ];
+  function parseTeachingAreaStats(summary) {
+    const lines = summary.split("\n");
+    const stats = {};
+    let inStats = false;
+    for (const line of lines) {
+      if (line.startsWith("TEACHING AREA STATISTICS:")) {
+        inStats = true;
+        continue;
+      }
+      if (inStats) {
+        if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) break;
+        const match = line.match(/^([^.]+\.\d [^:]+): (\d+) utterances \(([\d.]+)%\)/);
+        if (match) {
+          stats[match[1].trim()] = {
+            value: parseInt(match[2], 10),
+            percent: parseFloat(match[3]),
+          };
+        }
+      }
+    }
+    TEACHING_AREA_CODES.forEach((code) => {
+      if (!stats[code]) stats[code] = { value: 0, percent: 0 };
+    });
+    return stats;
+  }
+  function statsToTable(statsObj) {
+    return TEACHING_AREA_CODES.map((code) => ({
+      name: code,
+      value: statsObj[code]?.value || 0,
+      percent: statsObj[code]?.percent || 0,
+    }));
+  }
+  // Render a table for each file
+  return (
+    <div className="space-y-6">
+      {fileSummaries.map((file, idx) => {
+        const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\\n/g, "\n"));
+        const tableData = statsToTable(stats);
+        return (
+          <div key={file.file_id || idx} className="overflow-x-auto">
+            <div className="font-semibold mb-1 text-blue-700">
+              {file.stored_filename || `File #${idx + 1}`}
+            </div>
+            <table className="min-w-[400px] border text-xs bg-white rounded shadow">
+              <thead>
+                <tr>
+                  <th className="border px-2 py-1">Teaching Area</th>
+                  <th className="border px-2 py-1">Utterances</th>
+                  <th className="border px-2 py-1">% of Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tableData.map((row) => (
+                  <tr key={row.name}>
+                    <td className="border px-2 py-1 text-left">{row.name}</td>
+                    <td className="border px-2 py-1 text-center">{row.value}</td>
+                    <td className="border px-2 py-1 text-center">{row.percent}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Helper to detect summary requests
+function isSummaryRequest(text) {
+  return /summary|summarize|data overview|lesson overview/i.test(text);
+}
+
+// Helper to generate unique IDs for messages
+function uniqueId() {
+  return Date.now() + Math.random();
+}
 
 export default function Chatbot({ fileIds }) {
   const [fileNames, setFileNames] = useState([]);
@@ -123,25 +215,50 @@ export default function Chatbot({ fileIds }) {
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    const userMessage = {
-      id: messages.length + 1,
-      role: "user",
-      content: input,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
+    let summaryMessage = null;
+    if (isSummaryRequest(input)) {
+      // Fetch and display summary table before chatbot response
+      const fileSummaries = await fetchLessonSummaries(fileIds);
+      summaryMessage = {
+        id: messages.length + 1,
+        role: "assistant",
+        type: "summary-table",
+        fileSummaries,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, {
+        id: messages.length + 2,
+        role: "user",
+        content: input,
+        timestamp: new Date(),
+      }, summaryMessage]);
+    } else {
+      setMessages((prev) => [...prev, {
+        id: messages.length + 1,
+        role: "user",
+        content: input,
+        timestamp: new Date(),
+      }]);
+    }
     setInput("");
     setBotLoading(true);
 
     try {
-      // Format conversation history for API (now no transformation needed)
+      // Only include user/assistant messages with string content in history
       const conversationHistory = messages
-        .filter((msg) => msg.role !== "assistant" || msg.content.trim()) // Exclude empty assistant messages
+        .filter((msg) =>
+          (!msg.type || msg.type === undefined) &&
+          msg.role &&
+          typeof msg.content === "string" &&
+          msg.content.trim() !== ""
+        )
         .map((msg) => ({
           role: msg.role,
           content: msg.content,
         }));
-
+      if (!isSummaryRequest(input)) {
+        conversationHistory.push({ role: "user", content: input });
+      }
       const reader = await askChatbot({
         fileIds,
         question: input,
@@ -149,17 +266,8 @@ export default function Chatbot({ fileIds }) {
       });
       let botText = "";
       let done = false;
-      let botMessageId = messages.length + 2;
-      // Add a placeholder bot message
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: botMessageId,
-          role: "assistant",
-          content: "",
-          timestamp: new Date(),
-        },
-      ]);
+      let botMessageId = messages.length + (summaryMessage ? 3 : 2);
+      let assistantMessageAdded = false;
       const decoder = new TextDecoder();
       while (!done) {
         const { value, done: streamDone } = await reader.read();
@@ -167,11 +275,25 @@ export default function Chatbot({ fileIds }) {
         if (value) {
           const chunk = decoder.decode(value, { stream: true });
           botText += chunk;
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === botMessageId ? { ...msg, content: botText } : msg
-            )
-          );
+          if (!assistantMessageAdded) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: botMessageId,
+                role: "assistant",
+                content: botText,
+                timestamp: new Date(),
+              },
+            ]);
+            assistantMessageAdded = true;
+            setBotLoading(false);
+          } else {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === botMessageId ? { ...msg, content: botText } : msg
+              )
+            );
+          }
         }
       }
       setBotLoading(false);
@@ -180,7 +302,7 @@ export default function Chatbot({ fileIds }) {
       setMessages((prev) => [
         ...prev,
         {
-          id: messages.length + 2,
+          id: messages.length + (summaryMessage ? 3 : 2),
           role: "assistant",
           content: "Error contacting backend.",
           timestamp: new Date(),
@@ -304,7 +426,9 @@ export default function Chatbot({ fileIds }) {
               }`}
             >
               <div>
-                {msg.role === "assistant" ? (
+                {msg.type === "summary-table" ? (
+                  <InlineSummaryTable fileSummaries={msg.fileSummaries} />
+                ) : msg.role === "assistant" ? (
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 ) : (
                   msg.content
@@ -342,7 +466,7 @@ export default function Chatbot({ fileIds }) {
                   d="M4 12a8 8 0 018-8v8z"
                 ></path>
               </svg>
-              Typing...
+              Analyzing...
             </div>
           </div>
         )}

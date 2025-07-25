@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0b2e13; /* dark green */
+  --foreground: #ffffff; /* white */
 }
 
 @theme inline {
@@ -14,8 +14,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #05210a; /* even darker green for dark mode */
+    --foreground: #e6ffe6; /* light greenish white */
   }
 }
 
@@ -24,6 +24,7 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
 .modal-chart-bg {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: rgba(11, 46, 19, 0.3); /* dark green tint */
 }
