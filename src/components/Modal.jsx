@@ -7,21 +7,35 @@ import {
   ResponsiveContainer,
   CartesianGrid,
   Legend,
+  LineChart,
+  Line,
 } from "recharts";
 import jsPDF from "jspdf";
 import { toPng } from "html-to-image";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 // Teaching area codes in order (expandable)
 const TEACHING_AREA_CODES = [
-  "1.2 Setting and Maintaining Rules and Routine",
-  "4.1 Checking for understanding and providing feedback",
-  "3.2 Motivating learners for learning engagement",
   "1.1 Establishing Interaction and rapport",
-  "3.3 Using Questions to deepen learning",
+  "1.2 Setting and Maintaining Rules and Routine",
   "3.1 Activating prior knowledge",
+  "3.2 Motivating learners for learning engagement",
+  "3.3 Using Questions to deepen learning",
   "3.4 Facilitating collaborative learning",
   "3.5 Concluding the lesson",
+  "4.1 Checking for understanding and providing feedback",
+];
+
+// Define a color palette for lines
+const LINE_COLORS = [
+  "#22c55e", // green
+  "#2563eb", // blue
+  "#f59e42", // orange
+  "#e11d48", // red
+  "#a21caf", // purple
+  "#0ea5e9", // sky
+  "#facc15", // yellow
+  "#64748b", // slate
 ];
 
 // Parse one file's teaching area stats
@@ -59,6 +73,7 @@ function parseTeachingAreaStats(summary) {
 function statsToChartData(statsObj) {
   return TEACHING_AREA_CODES.map((code) => ({
     name: code,
+    code: code.split(" ")[0],
     value: statsObj[code]?.value || 0,
     percent: statsObj[code]?.percent || 0,
   }));
@@ -80,7 +95,10 @@ function getAverageStats(allStats) {
 }
 
 export default function Modal({ open, onClose, fileSummaries = [] }) {
+  // All hooks must be called before any return
   const chartRefs = useRef([]);
+  const [selectedAreas, setSelectedAreas] = useState(() => [...TEACHING_AREA_CODES]);
+  const [displayMode, setDisplayMode] = useState('percent');
   if (!open) return null;
 
   // Parse all summaries to aligned stats objects
@@ -90,79 +108,114 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
   const chartDatas = allStats.map(statsToChartData);
   const averageStats = getAverageStats(allStats);
 
+  // Prepare data for grouped bar chart
+  // Helper to strip .xlsx from lesson names
+  function stripXlsx(filename) {
+    return filename.replace(/\.xlsx$/i, "");
+  }
+  const lessonNames = fileSummaries.map((file, idx) => stripXlsx(file.stored_filename || `Lesson #${idx + 1}`));
+  const groupedBarData = TEACHING_AREA_CODES.map((code) => {
+    const entry = { code: code.split(" ")[0] };
+    fileSummaries.forEach((file, idx) => {
+      const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
+      entry[lessonNames[idx]] = getStatValue(stats[code], displayMode);
+    });
+    return entry;
+  });
+
+  function handleAreaToggle(area) {
+    setSelectedAreas((prev) =>
+      prev.includes(area)
+        ? prev.filter((a) => a !== area)
+        : [...prev, area]
+    );
+  }
+
   async function handleDownloadPDF() {
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.text("Teaching Analytics Summary", 10, 12);
-
     let y = 22;
-    for (let i = 0; i < fileSummaries.length; i++) {
-      const file = fileSummaries[i];
-      doc.setFontSize(12);
-      doc.text(
-        `File: ${file.stored_filename || file.file_id || `#${i + 1}`}`,
-        10,
-        y
-      );
-      y += 6;
 
-      // Chart image for each file
-      const chartNode = chartRefs.current[i];
-      if (chartNode) {
-        try {
-          const dataUrl = await toPng(chartNode, {
-            backgroundColor: "white",
-            cacheBust: true,
-          });
-          doc.addImage(dataUrl, "PNG", 10, y, 180, 45);
-        } catch {
-          doc.text("Chart unavailable", 10, y + 20);
-        }
-      }
-      y += 50;
-
-      // Stats for each file
-      TEACHING_AREA_CODES.forEach((code) => {
-        doc.text(`${code}: ${allStats[i][code]?.percent || 0}%`, 10, y);
-        y += 6;
-      });
-      y += 8;
-      if (y > 240 && i !== fileSummaries.length - 1) {
-        doc.addPage();
-        y = 20;
-      }
-    }
-
-    // Average chart last
-    doc.addPage();
+    // Grouped Bar Chart (Teaching Area Distribution Across Lessons)
     doc.setFontSize(14);
-    doc.text("Average Distribution", 10, 15);
-
-    const avgChartNode = chartRefs.current[fileSummaries.length];
-    if (avgChartNode) {
+    doc.text("Utterances per Teaching Area Across Lessons", 10, y);
+    y += 6;
+    const groupedBarNode = chartRefs.current["groupedBar"];
+    if (groupedBarNode) {
       try {
-        const dataUrl = await toPng(avgChartNode, {
+        const dataUrl = await toPng(groupedBarNode, {
           backgroundColor: "white",
           cacheBust: true,
         });
-        doc.addImage(dataUrl, "PNG", 10, 20, 180, 45);
+        doc.addImage(dataUrl, "PNG", 10, y, 180, 60);
       } catch {
-        doc.text("Chart unavailable", 10, 30);
+        doc.text("Chart unavailable", 10, y + 20);
       }
     }
+    y += 65;
 
-    // Average stats
-    let y2 = 75;
-    averageStats.forEach((area) =>
-      doc.text(`${area.name}: ${area.percent}%`, 10, (y2 += 6))
-    );
+    // Total Distribution Bar Chart
+    doc.setFontSize(14);
+    doc.text("Total Distribution", 10, y);
+    y += 6;
+    const totalDistNode = chartRefs.current["totalDist"];
+    if (totalDistNode) {
+      try {
+        const dataUrl = await toPng(totalDistNode, {
+          backgroundColor: "white",
+          cacheBust: true,
+        });
+        doc.addImage(dataUrl, "PNG", 10, y, 180, 60);
+      } catch {
+        doc.text("Chart unavailable", 10, y + 20);
+      }
+    }
+    y += 65;
+
+    // Line Chart (% of Utterances per Teaching Area Across Lessons)
+    doc.setFontSize(14);
+    doc.text("Utterances per Teaching Area Across Lessons (Line)", 10, y);
+    y += 6;
+    const lineChartNode = chartRefs.current["lineChart"];
+    if (lineChartNode) {
+      try {
+        const dataUrl = await toPng(lineChartNode, {
+          backgroundColor: "white",
+          cacheBust: true,
+        });
+        doc.addImage(dataUrl, "PNG", 10, y, 180, 60);
+      } catch {
+        doc.text("Chart unavailable", 10, y + 20);
+      }
+    }
+    y += 65;
+
+    // Add legend for line chart (selected areas)
+    doc.setFontSize(12);
+    doc.text("Legend (Line Chart):", 10, y);
+    y += 6;
+    TEACHING_AREA_CODES.filter((code) => selectedAreas.includes(code)).forEach((code, idx) => {
+      doc.setTextColor(0, 0, 0);
+      doc.text(`${code.split(" ")[0]}`, 15, y);
+      y += 6;
+    });
 
     doc.save("teaching_analytics_summary.pdf");
   }
 
+  // Helper to get the correct value for charts
+  function getStatValue(stat, mode) {
+    return mode === 'percent' ? (stat?.percent || 0) : (stat?.value || 0);
+  }
+
+  // Helper for Y-axis label
+  const yAxisTickFormatter = (val) => displayMode === 'percent' ? `${val}%` : val;
+  const tooltipFormatter = (val) => displayMode === 'percent' ? `${val}%` : val;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-white/40 px-2 py-4">
-      <div className="bg-white rounded-xl shadow-xl p-4 sm:p-8 max-w-4xl w-full relative mx-auto overflow-y-auto max-h-[95vh]">
+      <div className="bg-white rounded-xl shadow-xl p-4 sm:p-8 max-w-6xl w-full relative mx-auto overflow-y-auto max-h-[95vh]">
         <button
           className="absolute top-2 right-2 text-gray-500 hover:text-blue-600 text-2xl"
           onClick={onClose}
@@ -172,75 +225,184 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
         <h2 className="text-2xl font-bold mb-4 text-center">
           Teaching Analytics Summary
         </h2>
+        {/* Toggle for percent/utterances */}
+        <div className="flex justify-center mb-6">
+          <div className="inline-flex items-center gap-4 bg-gray-100 px-4 py-2 rounded shadow text-base">
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="displayMode"
+                value="percent"
+                checked={displayMode === 'percent'}
+                onChange={() => setDisplayMode('percent')}
+                className="mr-1 accent-blue-600"
+              />
+              % of Utterances
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="displayMode"
+                value="value"
+                checked={displayMode === 'value'}
+                onChange={() => setDisplayMode('value')}
+                className="mr-1 accent-blue-600"
+              />
+              Number of Utterances
+            </label>
+          </div>
+        </div>
         <p className="mb-4 text-gray-700 text-center">
           Below are teaching area distributions for all selected lectures, plus
           an overall average.
         </p>
-        {/* Multiple charts, horizontal scroll if too many */}
-        <div className="flex gap-8 overflow-x-auto mb-8">
-          {chartDatas.map((data, idx) => (
-            <div
-              key={idx}
-              className="min-w-[350px] max-w-[400px] flex-shrink-0 border p-2 rounded-lg bg-gray-50"
-            >
-              <div
-                ref={(el) => (chartRefs.current[idx] = el)}
-                className="w-full h-56"
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={data}
-                    margin={{ top: 10, right: 10, left: 0, bottom: 40 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fontSize: 11 }}
-                      angle={-30}
-                      textAnchor="end"
-                      height={80}
-                      interval={0}
-                    />
-                    <YAxis />
-                    <Tooltip formatter={(val) => `${val}%`} />
-                    <Bar dataKey="percent" fill="#2563eb" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="text-sm text-gray-600 font-semibold mt-2 text-center">
-                {fileSummaries[idx]?.stored_filename || `File #${idx + 1}`}
-              </div>
-            </div>
-          ))}
-        </div>
-        {/* Average Chart */}
+        {/* Grouped Bar Chart for Teaching Area Distribution */}
         <div className="mb-8">
+          {/* Attach ref for PDF export */}
+          <div ref={el => (chartRefs.current["groupedBar"] = el)} className="w-full h-[400px] bg-white border rounded-lg mb-2" style={{ position: 'absolute', left: '-9999px', top: 0, height: 400, width: '100%' }} />
           <h3 className="text-xl font-bold mb-2 text-center">
-            Average Distribution
+            Teaching Area Distribution Across Lessons
           </h3>
-          <div
-            ref={(el) => (chartRefs.current[fileSummaries.length] = el)}
-            className="w-full h-56 bg-white border rounded-lg"
-          >
+          <div className="w-full h-[400px] bg-white border rounded-lg">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={averageStats}
-                margin={{ top: 10, right: 10, left: 0, bottom: 40 }}
+                data={groupedBarData}
+                margin={{ top: 20, right: 120, left: 60, bottom: 40 }}
+                barCategoryGap={20}
               >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 11 }}
-                  angle={-30}
-                  textAnchor="end"
-                  height={80}
-                  interval={0}
-                />
-                <YAxis />
-                <Tooltip formatter={(val) => `${val}%`} />
-                <Bar dataKey="percent" fill="#22c55e" />
+                <XAxis dataKey="code" tick={{ fontSize: 15, fontWeight: 600 }} height={40} interval={0} />
+                <YAxis tickFormatter={yAxisTickFormatter} />
+                <Tooltip formatter={tooltipFormatter} />
+                <Legend />
+                {lessonNames.map((lesson, idx) => (
+                  <Bar
+                    key={lesson}
+                    dataKey={lesson}
+                    name={lesson}
+                    fill={LINE_COLORS[idx % LINE_COLORS.length]}
+                    radius={[4, 4, 0, 0]}
+                  />
+                ))}
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+        {/* Total Distribution Bar Chart */}
+        <div className="mb-8">
+          {/* Attach ref for PDF export */}
+          <div ref={el => (chartRefs.current["totalDist"] = el)} className="w-full h-[400px] bg-white border rounded-lg mb-2" style={{ position: 'absolute', left: '-9999px', top: 0, height: 400, width: '100%' }} />
+          <h3 className="text-xl font-bold mb-2 text-center">
+            Total Distribution
+          </h3>
+          <div className="w-full h-[400px] bg-white border rounded-lg">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={TEACHING_AREA_CODES.map((code, idx) => {
+                  if (displayMode === 'value') {
+                    // Sum utterances for each area across all lessons
+                    let total = 0;
+                    fileSummaries.forEach((file) => {
+                      const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
+                      total += stats[code]?.value || 0;
+                    });
+                    return { code: code.split(" ")[0], value: total };
+                  } else {
+                    // Use average percent as before
+                    return {
+                      code: code.split(" ")[0],
+                      percent: averageStats[idx]?.percent || 0,
+                    };
+                  }
+                })}
+                margin={{ top: 20, right: 120, left: 60, bottom: 40 }}
+                barCategoryGap={20}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="code" tick={{ fontSize: 15, fontWeight: 600 }} height={40} interval={0} />
+                <YAxis tickFormatter={yAxisTickFormatter} />
+                <Tooltip formatter={tooltipFormatter} />
+                <Bar dataKey={displayMode === 'value' ? 'value' : 'percent'} fill={LINE_COLORS[0]} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Lesson-wise Utterance Line Chart */}
+        <div className="mb-8">
+          {/* Attach ref for PDF export */}
+          <div ref={el => (chartRefs.current["lineChart"] = el)} className="w-full h-[500px] bg-white border rounded-lg mb-2" style={{ position: 'absolute', left: '-9999px', top: 0, height: 500, width: '100%' }} />
+          <h3 className="text-xl font-bold mb-2 text-center">
+            Utterances per Teaching Area Across Lessons
+          </h3>
+          <div className="flex flex-row w-full h-[500px] bg-white border rounded-lg">
+            {/* Checkbox legend */}
+            <div className="flex flex-col justify-center items-start pl-4 min-w-[80px] border-r bg-gray-50">
+              {/* Select All/Unselect All Checkbox */}
+              <label className="flex items-center cursor-pointer select-none text-base font-bold mb-4">
+                <input
+                  type="checkbox"
+                  checked={selectedAreas.length === TEACHING_AREA_CODES.length}
+                  ref={el => {
+                    if (el) el.indeterminate = selectedAreas.length > 0 && selectedAreas.length < TEACHING_AREA_CODES.length;
+                  }}
+                  onChange={e => {
+                    if (selectedAreas.length === TEACHING_AREA_CODES.length) {
+                      setSelectedAreas([]);
+                    } else {
+                      setSelectedAreas([...TEACHING_AREA_CODES]);
+                    }
+                  }}
+                  className="mr-2 accent-blue-600"
+                />
+                All
+              </label>
+              {TEACHING_AREA_CODES.map((code, idx) => (
+                <label key={code} className="flex items-center mb-2 cursor-pointer select-none text-base font-bold" style={{ color: LINE_COLORS[idx % LINE_COLORS.length] }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedAreas.includes(code)}
+                    onChange={() => handleAreaToggle(code)}
+                    className="mr-2 accent-current"
+                  />
+                  {code.split(" ")[0]}
+                </label>
+              ))}
+            </div>
+            {/* Chart */}
+            <div className="flex-1 h-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={fileSummaries.map((file, idx) => {
+                    const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
+                    const entry = { lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`) };
+                    TEACHING_AREA_CODES.forEach((code) => {
+                      entry[code] = getStatValue(stats[code], displayMode);
+                    });
+                    return entry;
+                  })}
+                  margin={{ top: 20, right: 120, left: 60, bottom: 10 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="lesson" tick={{ fontSize: 12, fontWeight: 600, dy: 16 }} angle={0} textAnchor="middle" height={40} interval={0} />
+                  <YAxis tickFormatter={yAxisTickFormatter} />
+                  <Tooltip formatter={tooltipFormatter} />
+                  {/* No Legend here, since we have our own */}
+                  {TEACHING_AREA_CODES.filter((code) => selectedAreas.includes(code)).map((code, idx) => (
+                    <Line
+                      key={code}
+                      type="linear"
+                      dataKey={code}
+                      name={code.split(" ")[0]}
+                      stroke={LINE_COLORS[idx % LINE_COLORS.length]}
+                      strokeWidth={3}
+                      dot={{ r: 6, stroke: LINE_COLORS[idx % LINE_COLORS.length], strokeWidth: 2, fill: '#fff' }}
+                      activeDot={{ r: 8 }}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
         {/* Download PDF */}

@@ -11,14 +11,14 @@ import React from "react";
 function InlineSummaryTable({ fileSummaries }) {
   // Reuse Modal's parsing logic
   const TEACHING_AREA_CODES = [
-    "1.2 Setting and Maintaining Rules and Routine",
-    "4.1 Checking for understanding and providing feedback",
-    "3.2 Motivating learners for learning engagement",
     "1.1 Establishing Interaction and rapport",
-    "3.3 Using Questions to deepen learning",
+    "1.2 Setting and Maintaining Rules and Routine",
     "3.1 Activating prior knowledge",
+    "3.2 Motivating learners for learning engagement",
+    "3.3 Using Questions to deepen learning",
     "3.4 Facilitating collaborative learning",
     "3.5 Concluding the lesson",
+    "4.1 Checking for understanding and providing feedback",
   ];
   function parseTeachingAreaStats(summary) {
     const lines = summary.split("\n");
@@ -31,17 +31,18 @@ function InlineSummaryTable({ fileSummaries }) {
       }
       if (inStats) {
         if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) break;
-        const match = line.match(/^([^.]+\.\d [^:]+): (\d+) utterances \(([\d.]+)%\)/);
+        const match = line.match(/^([^.]+\.\d [^:]+): (\d+) utterances \(([^)]+)%\)(?: - (\d+) questions)?/);
         if (match) {
           stats[match[1].trim()] = {
             value: parseInt(match[2], 10),
             percent: parseFloat(match[3]),
+            questions: match[4] ? parseInt(match[4], 10) : undefined,
           };
         }
       }
     }
     TEACHING_AREA_CODES.forEach((code) => {
-      if (!stats[code]) stats[code] = { value: 0, percent: 0 };
+      if (!stats[code]) stats[code] = { value: 0, percent: 0, questions: 0 };
     });
     return stats;
   }
@@ -50,20 +51,55 @@ function InlineSummaryTable({ fileSummaries }) {
       name: code,
       value: statsObj[code]?.value || 0,
       percent: statsObj[code]?.percent || 0,
+      questions: statsObj[code]?.questions || 0,
     }));
+  }
+  // Parse QUESTION ANALYSIS section
+  function parseSection(summary, sectionHeader) {
+    const lines = summary.split("\n");
+    const sectionLines = [];
+    let inSection = false;
+    for (const line of lines) {
+      if (line.startsWith(sectionHeader)) {
+        inSection = true;
+        continue;
+      }
+      if (inSection) {
+        if (line.trim() === "" || line.match(/^([A-Z ]+):/)) break;
+        sectionLines.push(line.trim());
+      }
+    }
+    // Parse lines like '- Key: Value' into { key, value }
+    return sectionLines
+      .map((line) => {
+        const match = line.match(/^-\s*([^:]+):\s*(.+)$/);
+        if (match) {
+          return { key: match[1].trim(), value: match[2].trim() };
+        }
+        return null;
+      })
+      .filter(Boolean);
   }
   // Render a table for each file
   return (
-    <div className="space-y-6">
+    <div className="flex flex-row gap-6 overflow-x-auto pb-2">
       {fileSummaries.map((file, idx) => {
-        const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\\n/g, "\n"));
+        const summary = (file.data_summary || "").replace(/\\n/g, "\n");
+        const stats = parseTeachingAreaStats(summary);
         const tableData = statsToTable(stats);
+        // Find the row with the highest percent
+        const maxPercent = Math.max(...tableData.map((row) => row.percent));
+        const questionAnalysis = parseSection(summary, "QUESTION ANALYSIS:");
+        const keyInsights = parseSection(summary, "KEY INSIGHTS:");
         return (
-          <div key={file.file_id || idx} className="overflow-x-auto">
+          <div
+            key={file.file_id || idx}
+            className="min-w-[400px] max-w-[450px] flex-shrink-0 overflow-x-auto mb-6 bg-white rounded-lg shadow p-3"
+          >
             <div className="font-semibold mb-1 text-blue-700">
               {file.stored_filename || `File #${idx + 1}`}
             </div>
-            <table className="min-w-[400px] border text-xs bg-white rounded shadow">
+            <table className="min-w-[350px] border text-xs bg-white rounded shadow mb-3">
               <thead>
                 <tr>
                   <th className="border px-2 py-1">Teaching Area</th>
@@ -73,7 +109,10 @@ function InlineSummaryTable({ fileSummaries }) {
               </thead>
               <tbody>
                 {tableData.map((row) => (
-                  <tr key={row.name}>
+                  <tr
+                    key={row.name}
+                    className={row.percent === maxPercent ? "bg-yellow-200" : ""}
+                  >
                     <td className="border px-2 py-1 text-left">{row.name}</td>
                     <td className="border px-2 py-1 text-center">{row.value}</td>
                     <td className="border px-2 py-1 text-center">{row.percent}%</td>
@@ -81,6 +120,26 @@ function InlineSummaryTable({ fileSummaries }) {
                 ))}
               </tbody>
             </table>
+            {questionAnalysis.length > 0 && (
+              <div className="mb-2">
+                <div className="font-semibold text-blue-700 mb-1">Question Analysis</div>
+                <ul className="list-disc pl-5 text-xs">
+                  {questionAnalysis.map((item, i) => (
+                    <li key={i}><span className="font-medium">{item.key}:</span> {item.value}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {keyInsights.length > 0 && (
+              <div>
+                <div className="font-semibold text-blue-700 mb-1">Key Insights</div>
+                <ul className="list-disc pl-5 text-xs">
+                  {keyInsights.map((item, i) => (
+                    <li key={i}><span className="font-medium">{item.key}:</span> {item.value}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         );
       })}
