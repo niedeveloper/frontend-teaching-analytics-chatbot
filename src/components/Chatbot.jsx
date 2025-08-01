@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import Modal from "./Modal";
 import { useUser } from "../context/UserContext";
 import React from "react";
+import { Send, ArrowUp, ArrowDown } from "lucide-react";
 
 // Inline summary table component for chat
 function InlineSummaryTable({ fileSummaries }) {
@@ -31,7 +32,9 @@ function InlineSummaryTable({ fileSummaries }) {
       }
       if (inStats) {
         if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) break;
-        const match = line.match(/^([^.]+\.\d [^:]+): (\d+) utterances \(([^)]+)%\)(?: - (\d+) questions)?/);
+        const match = line.match(
+          /^([^.]+\.\d [^:]+): (\d+) utterances \(([^)]+)%\)(?: - (\d+) questions)?/
+        );
         if (match) {
           stats[match[1].trim()] = {
             value: parseInt(match[2], 10),
@@ -111,31 +114,47 @@ function InlineSummaryTable({ fileSummaries }) {
                 {tableData.map((row) => (
                   <tr
                     key={row.name}
-                    className={row.percent === maxPercent ? "bg-yellow-200" : ""}
+                    className={
+                      row.percent === maxPercent ? "bg-yellow-200" : ""
+                    }
                   >
                     <td className="border px-2 py-1 text-left">{row.name}</td>
-                    <td className="border px-2 py-1 text-center">{row.value}</td>
-                    <td className="border px-2 py-1 text-center">{row.percent}%</td>
+                    <td className="border px-2 py-1 text-center">
+                      {row.value}
+                    </td>
+                    <td className="border px-2 py-1 text-center">
+                      {row.percent}%
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             {questionAnalysis.length > 0 && (
               <div className="mb-2">
-                <div className="font-semibold text-blue-700 mb-1">Question Analysis</div>
+                <div className="font-semibold text-blue-700 mb-1">
+                  Question Analysis
+                </div>
                 <ul className="list-disc pl-5 text-xs">
                   {questionAnalysis.map((item, i) => (
-                    <li key={i}><span className="font-medium">{item.key}:</span> {item.value}</li>
+                    <li key={i}>
+                      <span className="font-medium">{item.key}:</span>{" "}
+                      {item.value}
+                    </li>
                   ))}
                 </ul>
               </div>
             )}
             {keyInsights.length > 0 && (
               <div>
-                <div className="font-semibold text-blue-700 mb-1">Key Insights</div>
+                <div className="font-semibold text-blue-700 mb-1">
+                  Key Insights
+                </div>
                 <ul className="list-disc pl-5 text-xs">
                   {keyInsights.map((item, i) => (
-                    <li key={i}><span className="font-medium">{item.key}:</span> {item.value}</li>
+                    <li key={i}>
+                      <span className="font-medium">{item.key}:</span>{" "}
+                      {item.value}
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -167,6 +186,8 @@ export default function Chatbot({ fileIds }) {
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const { user } = useUser();
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   // Session info
   const [sessionId] = useState(() =>
@@ -285,19 +306,26 @@ export default function Chatbot({ fileIds }) {
         fileSummaries,
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, {
-        id: messages.length + 2,
-        role: "user",
-        content: input,
-        timestamp: new Date(),
-      }, summaryMessage]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: messages.length + 2,
+          role: "user",
+          content: input,
+          timestamp: new Date(),
+        },
+        summaryMessage,
+      ]);
     } else {
-      setMessages((prev) => [...prev, {
-        id: messages.length + 1,
-        role: "user",
-        content: input,
-        timestamp: new Date(),
-      }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: messages.length + 1,
+          role: "user",
+          content: input,
+          timestamp: new Date(),
+        },
+      ]);
     }
     setInput("");
     setBotLoading(true);
@@ -305,11 +333,12 @@ export default function Chatbot({ fileIds }) {
     try {
       // Only include user/assistant messages with string content in history
       const conversationHistory = messages
-        .filter((msg) =>
-          (!msg.type || msg.type === undefined) &&
-          msg.role &&
-          typeof msg.content === "string" &&
-          msg.content.trim() !== ""
+        .filter(
+          (msg) =>
+            (!msg.type || msg.type === undefined) &&
+            msg.role &&
+            typeof msg.content === "string" &&
+            msg.content.trim() !== ""
         )
         .map((msg) => ({
           role: msg.role,
@@ -398,6 +427,29 @@ export default function Chatbot({ fileIds }) {
     await fetchFileSummaries();
     setShowModal(true);
   };
+
+  //Back to top button:
+
+  // scroll handler
+  useEffect(() => {
+    function handleScroll() {
+      const scrollY = window.scrollY;
+      const innerH = window.innerHeight;
+      const docH = document.documentElement.scrollHeight;
+      setShowScrollTop(scrollY > 100);
+      setShowScrollBottom(scrollY + innerH < docH - 100);
+    }
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
+  const scrollToBottom = () =>
+    window.scrollTo({
+      top: document.documentElement.scrollHeight,
+      behavior: "smooth",
+    });
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
@@ -560,10 +612,7 @@ export default function Chatbot({ fileIds }) {
             disabled={!input.trim() || botLoading || loading}
             aria-label="Send"
           >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M2.94 2.94a1.5 1.5 0 012.12 0l12 12a1.5 1.5 0 01-2.12 2.12l-12-12a1.5 1.5 0 010-2.12z" />
-              <path d="M2.94 17.06a1.5 1.5 0 002.12 0l12-12a1.5 1.5 0 00-2.12-2.12l-12 12a1.5 1.5 0 000 2.12z" />
-            </svg>
+            <Send size={20} />
           </button>
         </form>
         <div className="text-center mt-2">
@@ -578,6 +627,27 @@ export default function Chatbot({ fileIds }) {
         onClose={() => setShowModal(false)}
         fileSummaries={fileSummaries}
       />
+      {/* Floating Scroll Buttons */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50">
+        {showScrollTop && (
+          <button
+            onClick={scrollToTop}
+            className="w-10 h-10 rounded-full bg-blue-600/60 backdrop-blur-md text-white shadow-lg flex items-center justify-center hover:bg-blue-500/70 transition"
+            aria-label="Back to Top"
+          >
+            <ArrowUp size={20} />
+          </button>
+        )}
+        {showScrollBottom && (
+          <button
+            onClick={scrollToBottom}
+            className="w-10 h-10 rounded-full bg-blue-600/60 backdrop-blur-md text-white shadow-lg flex items-center justify-center hover:bg-blue-500/70 transition"
+            aria-label="Go to Bottom"
+          >
+            <ArrowDown size={20} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
