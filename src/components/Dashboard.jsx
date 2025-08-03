@@ -10,6 +10,7 @@ import TopNav from "./TopNav.jsx";
 import SummaryCards from "./SummaryCard.jsx";
 import TrendChart from "./TrendChart.jsx";
 import ClassFileTable from "./ClassFileTable.jsx";
+import DataUploadForm from "./DataUploadForm.jsx";
 
 export default function Dashboard() {
   const { user, setUser } = useUser();
@@ -134,6 +135,7 @@ export default function Dashboard() {
       <TopNav userData={userData} handleLogout={handleLogout} />
       <div className="max-w-7xl mx-auto px-2 md:px-8 pt-10 space-y-8">
         <SummaryCards summary={summary} />
+        <DataUploadForm />
         <TrendChart />
         <ClassFileTable
           filterClass={filterClass}
