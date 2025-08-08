@@ -571,6 +571,11 @@ export default function Chatbot({ fileIds }) {
             Press Enter to send, Shift+Enter for new line
           </small>
         </div>
+        <div className="text-center mt-4 pb-2">
+          <small className="text-gray-500 italic">
+            Disclaimer: This chatbot only has access to teacher data and no access to student data.
+          </small>
+        </div>
       </div>
       {/* Place Modal here, outside of other divs */}
       <Modal

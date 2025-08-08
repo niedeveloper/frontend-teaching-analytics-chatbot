@@ -38,3 +38,38 @@ export async function fetchLessonSummaries(fileIds) {
   if (error) throw error;
   return data || [];
 }
+
+// Fetch chunks for given file IDs with all necessary fields for charting
+export async function fetchChunksByFileIds(fileIds) {
+  if (!fileIds || fileIds.length === 0) return [];
+  
+  const { data, error } = await supabase
+    .from("chunks")
+    .select(`
+      file_id,
+      sequence_order,
+      word_count,
+      duration_seconds,
+      chunk_id,
+      start_time,
+      end_time,
+      utterance_count,
+      teaching_areas,
+      area_distribution,
+      chunk_text,
+      class_section,
+      class_section_label,
+      relative_position,
+      utterances,
+      embedding
+    `)
+    .in("file_id", fileIds.map(Number))
+    .order("sequence_order", { ascending: true });
+    
+  if (error) {
+    console.error("Error fetching chunks:", error);
+    return [];
+  }
+  
+  return data || [];
+}
