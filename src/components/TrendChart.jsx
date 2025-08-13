@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useUser } from "../context/UserContext";
 import {
@@ -10,9 +10,14 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  BarChart,
+  Bar,
+  Legend,
 } from "recharts";
 
-// Define all teaching areas (in order)
+// -----------------------------
+// Constants
+// -----------------------------
 const TEACHING_AREA_CODES = [
   "1.1 Establishing Interaction and rapport",
   "1.2 Setting and Maintaining Rules and Routine",
@@ -24,7 +29,6 @@ const TEACHING_AREA_CODES = [
   "4.1 Checking for understanding and providing feedback",
 ];
 
-// Nice color palette for lines & checkboxes
 const LINE_COLORS = [
   "#22c55e",
   "#2563eb",
@@ -36,6 +40,9 @@ const LINE_COLORS = [
   "#64748b",
 ];
 
+// -----------------------------
+// Helpers
+// -----------------------------
 function parseTeachingAreaStats(summary) {
   const lines = (summary || "").split("\n");
   const stats = {};
@@ -63,20 +70,42 @@ function parseTeachingAreaStats(summary) {
   });
   return stats;
 }
+
 function getStatValue(stat, mode) {
   return mode === "percent" ? stat?.percent || 0 : stat?.value || 0;
 }
+
 function stripXlsx(filename) {
   return (filename || "").replace(/\.xlsx$/i, "");
 }
 
+function getAverageStats(allStats) {
+  return TEACHING_AREA_CODES.map((code) => {
+    const total = allStats.reduce(
+      (sum, stats) => sum + (stats[code]?.percent || 0),
+      0
+    );
+    return {
+      name: code,
+      percent: allStats.length ? +(total / allStats.length).toFixed(1) : 0,
+    };
+  });
+}
+
+// -----------------------------
+// Component
+// -----------------------------
 export default function TrendChart() {
   const { user } = useUser();
   const [fileSummaries, setFileSummaries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [displayMode, setDisplayMode] = useState("percent");
+  const [displayMode, setDisplayMode] = useState("percent"); // percent | value
   const [selectedAreas, setSelectedAreas] = useState([...TEACHING_AREA_CODES]);
+  const [chartView, setChartView] = useState("line"); // line | groupedBar | total
 
+  // ---------------------------------
+  // Fetch
+  // ---------------------------------
   useEffect(() => {
     async function fetchFileSummaries() {
       setLoading(true);
@@ -85,7 +114,6 @@ export default function TrendChart() {
         setLoading(false);
         return;
       }
-      // 1. Get user_id for this user
       const { data: userRows, error: userError } = await supabase
         .from("users")
         .select("user_id")
@@ -98,7 +126,6 @@ export default function TrendChart() {
       }
       const userId = userRows.user_id;
 
-      // 2. Get all class_ids for this user
       const { data: classRows, error: classError } = await supabase
         .from("classes")
         .select("class_id")
@@ -110,7 +137,6 @@ export default function TrendChart() {
       }
       const classIds = classRows.map((c) => c.class_id);
 
-      // 3. Get all files where class_id in user's classes
       const { data: fileRows, error: fileError } = await supabase
         .from("files")
         .select("file_id, stored_filename, data_summary")
@@ -127,28 +153,76 @@ export default function TrendChart() {
     fetchFileSummaries();
   }, [user]);
 
-  // Chart data (lesson = x axis, teaching area series)
-  const chartData = fileSummaries.map((file, idx) => {
-    const stats = parseTeachingAreaStats(
-      (file.data_summary || "").replace(/\\n/g, "\n")
-    );
-    const entry = {
-      lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`),
-    };
-    TEACHING_AREA_CODES.forEach((code) => {
-      entry[code] = getStatValue(stats[code], displayMode);
-    });
-    return entry;
-  });
+  // ---------------------------------
+  // Derived data
+  // ---------------------------------
+  const lessons = useMemo(
+    () =>
+      fileSummaries.map((f, idx) =>
+        stripXlsx(f.stored_filename || `Lesson #${idx + 1}`)
+      ),
+    [fileSummaries]
+  );
 
-  // Toggle a single teaching area
+  const allStats = useMemo(
+    () =>
+      fileSummaries.map((f) =>
+        parseTeachingAreaStats((f.data_summary || "").replace(/\\n/g, "\n"))
+      ),
+    [fileSummaries]
+  );
+
+  const chartDataLine = useMemo(() => {
+    return fileSummaries.map((file, idx) => {
+      const stats = parseTeachingAreaStats(
+        (file.data_summary || "").replace(/\\n/g, "\n")
+      );
+      const entry = {
+        lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`),
+      };
+      TEACHING_AREA_CODES.forEach((code) => {
+        entry[code] = getStatValue(stats[code], displayMode);
+      });
+      return entry;
+    });
+  }, [fileSummaries, displayMode]);
+
+  // Grouped bar: one row per area, multiple bars per lesson
+  const chartDataGroupedBar = useMemo(() => {
+    return TEACHING_AREA_CODES.map((code) => {
+      const row = { code: code.split(" ")[0] };
+      fileSummaries.forEach((file, idx) => {
+        const stats = parseTeachingAreaStats(
+          (file.data_summary || "").replace(/\\n/g, "\n")
+        );
+        row[stripXlsx(file.stored_filename || `Lesson #${idx + 1}`)] =
+          getStatValue(stats[code], displayMode);
+      });
+      return row;
+    });
+  }, [fileSummaries, displayMode]);
+
+  // Total distribution: if percent -> average % per area; if value -> sum of utterances
+  const chartDataTotal = useMemo(() => {
+    if (displayMode === "value") {
+      return TEACHING_AREA_CODES.map((code) => {
+        let total = 0;
+        allStats.forEach((s) => (total += s[code]?.value || 0));
+        return { code: code.split(" ")[0], value: total };
+      });
+    }
+    const avg = getAverageStats(allStats);
+    return avg.map((a) => ({ code: a.name.split(" ")[0], percent: a.percent }));
+  }, [allStats, displayMode]);
+
+  // ---------------------------------
+  // UI handlers
+  // ---------------------------------
   function handleAreaToggle(area) {
     setSelectedAreas((prev) =>
       prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]
     );
   }
-
-  // Select all/none controls
   function handleSelectAll() {
     setSelectedAreas([...TEACHING_AREA_CODES]);
   }
@@ -156,43 +230,37 @@ export default function TrendChart() {
     setSelectedAreas([]);
   }
 
+  const yTick = (val) => (displayMode === "percent" ? `${val}%` : val);
+  const tooltipFmt = (val) => (displayMode === "percent" ? `${val}%` : val);
+
   return (
     <section className="rounded-2xl shadow-lg bg-white/90 border border-blue-100 px-2 md:px-6 py-6 flex flex-col items-center">
-      <h2 className="text-indigo-700 font-semibold mb-4 text-lg md:text-xl">
-        Utterances per Teaching Area Across Lessons
+      <h2 className="text-indigo-700 font-semibold mb-2 text-lg md:text-xl">
+        Teaching Area Trends
       </h2>
 
-      {/* Area toggles */}
+      {/* Chart View Switcher */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
-        <button
-          onClick={handleSelectAll}
-          className="px-2 py-1 rounded bg-blue-100 text-blue-700 font-semibold text-xs hover:bg-blue-200"
-          type="button"
-        >
-          Select All
-        </button>
-        <button
-          onClick={handleClearAll}
-          className="px-2 py-1 rounded bg-gray-100 text-gray-700 font-semibold text-xs hover:bg-gray-200"
-          type="button"
-        >
-          Clear All
-        </button>
-        {TEACHING_AREA_CODES.map((code, idx) => (
-          <label
-            key={code}
-            className="flex items-center gap-1 text-xs font-bold cursor-pointer select-none"
-            style={{ color: LINE_COLORS[idx % LINE_COLORS.length] }}
-          >
-            <input
-              type="checkbox"
-              checked={selectedAreas.includes(code)}
-              onChange={() => handleAreaToggle(code)}
-              className="accent-current"
-            />
-            {code.split(" ")[0]}
-          </label>
-        ))}
+        <div className="inline-flex bg-gray-100 rounded-lg p-1 shadow">
+          {[
+            { key: "line", label: "Line (by Area across Lessons)" },
+            { key: "groupedBar", label: "Grouped Bar (Areas × Lessons)" },
+            { key: "total", label: "Total Distribution" },
+          ].map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setChartView(opt.key)}
+              className={`px-3 py-1 text-sm font-semibold rounded-md transition-colors ${
+                chartView === opt.key
+                  ? "bg-white text-blue-700"
+                  : "text-gray-700 hover:text-blue-700"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Toggle for percent/utterances */}
@@ -223,8 +291,43 @@ export default function TrendChart() {
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="w-full h-[500px] bg-white border rounded-lg">
+      {/* Area toggles (only for line view) */}
+      {chartView === "line" && (
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+          <button
+            onClick={handleSelectAll}
+            className="px-2 py-1 rounded bg-blue-100 text-blue-700 font-semibold text-xs hover:bg-blue-200"
+            type="button"
+          >
+            Select All
+          </button>
+          <button
+            onClick={handleClearAll}
+            className="px-2 py-1 rounded bg-gray-100 text-gray-700 font-semibold text-xs hover:bg-gray-200"
+            type="button"
+          >
+            Clear All
+          </button>
+          {TEACHING_AREA_CODES.map((code, idx) => (
+            <label
+              key={code}
+              className="flex items-center gap-1 text-xs font-bold cursor-pointer select-none"
+              style={{ color: LINE_COLORS[idx % LINE_COLORS.length] }}
+            >
+              <input
+                type="checkbox"
+                checked={selectedAreas.includes(code)}
+                onChange={() => handleAreaToggle(code)}
+                className="accent-current"
+              />
+              {code.split(" ")[0]}
+            </label>
+          ))}
+        </div>
+      )}
+
+      {/* Chart Container */}
+      <div className="w-full h-[520px] bg-white border rounded-lg">
         {loading ? (
           <div className="flex items-center justify-center h-full w-full text-gray-400">
             Loading chart...
@@ -233,10 +336,10 @@ export default function TrendChart() {
           <div className="flex items-center justify-center h-full w-full text-gray-400">
             No data found.
           </div>
-        ) : (
+        ) : chartView === "line" ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
-              data={chartData}
+              data={chartDataLine}
               margin={{ top: 20, right: 120, left: 60, bottom: 10 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
@@ -246,17 +349,8 @@ export default function TrendChart() {
                 height={40}
                 interval={0}
               />
-              <YAxis
-                tickFormatter={(val) =>
-                  displayMode === "percent" ? `${val}%` : val
-                }
-              />
-              <Tooltip
-                formatter={(val) =>
-                  displayMode === "percent" ? `${val}%` : val
-                }
-              />
-              {/* Only render checked lines */}
+              <YAxis tickFormatter={yTick} />
+              <Tooltip formatter={tooltipFmt} />
               {TEACHING_AREA_CODES.filter((code) =>
                 selectedAreas.includes(code)
               ).map((code, idx) => (
@@ -278,9 +372,71 @@ export default function TrendChart() {
               ))}
             </LineChart>
           </ResponsiveContainer>
+        ) : chartView === "groupedBar" ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={chartDataGroupedBar}
+              margin={{ top: 20, right: 120, left: 60, bottom: 40 }}
+              barCategoryGap={20}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="code"
+                tick={{ fontSize: 15, fontWeight: 600 }}
+                height={40}
+                interval={0}
+                label={{
+                  value: "Teaching Areas",
+                  position: "insideBottom",
+                  dy: 10,
+                }}
+              />
+              <YAxis tickFormatter={yTick} />
+              <Tooltip formatter={tooltipFmt} />
+              <Legend verticalAlign="top" align="center" />
+              {lessons.map((lesson, idx) => (
+                <Bar
+                  key={lesson}
+                  dataKey={lesson}
+                  name={lesson}
+                  fill={LINE_COLORS[idx % LINE_COLORS.length]}
+                  radius={[4, 4, 0, 0]}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={chartDataTotal}
+              margin={{ top: 20, right: 120, left: 60, bottom: 40 }}
+              barCategoryGap={20}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="code"
+                tick={{ fontSize: 15, fontWeight: 600 }}
+                height={40}
+                interval={0}
+                label={{
+                  value: "Teaching Areas",
+                  position: "insideBottom",
+                  dy: 10,
+                }}
+              />
+              <YAxis tickFormatter={yTick} />
+              <Tooltip formatter={tooltipFmt} />
+              <Bar
+                dataKey={displayMode === "value" ? "value" : "percent"}
+                fill={LINE_COLORS[0]}
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
         )}
       </div>
-      {/* Full Text Legend */}
+
+      {/* Legend block */}
       <div className="w-full mt-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
           {TEACHING_AREA_CODES.map((code, idx) => (

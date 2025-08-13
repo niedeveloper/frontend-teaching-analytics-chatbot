@@ -4,7 +4,10 @@ import React from "react";
 export default function DataUploadForm() {
   const handleOpenForm = () => {
     // Replace the URL below with your actual Microsoft Form link
-    window.open("https://forms.gle/jdX5WgoBNLPCj6ec6", "_blank");
+    window.open(
+      "https://forms.office.com/Pages/ResponsePage.aspx?id=-L9HmjLSsECvLSLOcYpTQ_FO7dvl3t5Dh6ZlDTT8PtRUNkUyVUlIUElPUDFTUkVMS0g0MldaRk5ROCQlQCN0PWcu",
+      "_blank"
+    );
   };
 
   return (
@@ -19,8 +22,13 @@ export default function DataUploadForm() {
           "[Subject]_[Class]_[Date of lesson].mp3"
         </span>
         <br />
-        Hi, Alyssa. When you submit this form, the owner will see your name and
-        email address.
+        When you submit this form, the owner will see your name and email
+        address.
+        <br />
+        <span className="text-yellow-600 font-semibold">
+          Please note: It will take around 5 hours to process in our backend
+          system.
+        </span>
       </p>
       <button
         onClick={handleOpenForm}
