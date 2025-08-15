@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { askChatbot, fetchLessonSummaries } from "../lib/api";
 import ReactMarkdown from "react-markdown";
 import Modal from "./Modal";
+import GraphRenderer from "./GraphRenderer";
 import { useUser } from "../context/UserContext";
 import React from "react";
 import { Send, ArrowUp, ArrowDown } from "lucide-react";
@@ -176,7 +177,7 @@ function uniqueId() {
   return Date.now() + Math.random();
 }
 
-export default function Chatbot({ fileIds }) {
+export default function Chatbot({ fileIds: initialFileIds }) {
   const [fileNames, setFileNames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState([]);
@@ -188,12 +189,52 @@ export default function Chatbot({ fileIds }) {
   const { user } = useUser();
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
+  const [resumedSessionId, setResumedSessionId] = useState(null);
+  const [fileIds, setFileIds] = useState(initialFileIds || []);
 
   // Session info
   const [sessionId] = useState(() =>
     crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
   );
   const [startedAt] = useState(() => new Date().toISOString());
+
+  // Resume conversation function
+  const resumeConversation = async (sessionId) => {
+    try {
+      setLoading(true);
+      const { data: session, error } = await supabase
+        .from("chatbot_sessions")
+        .select(`
+          session_id,
+          file_ids,
+          conversation
+        `)
+        .eq("session_id", sessionId)
+        .single();
+
+      if (error || !session) {
+        throw new Error("Failed to load conversation");
+      }
+
+      // Set conversation state
+      setFileIds(session.file_ids || []);
+      // For now, just show file IDs since we don't have file names
+      setFileNames(session.file_ids?.map(id => `File ${id}`) || []);
+      setMessages(session.conversation || []);
+      setResumedSessionId(sessionId);
+      setIsResuming(true);
+
+      // Update URL to show resuming
+      router.replace(`/chatbot?session=${sessionId}&resume=true`);
+      
+    } catch (err) {
+      console.error("Failed to resume conversation:", err);
+      alert("Failed to load conversation. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const [fileSummaries, setFileSummaries] = useState([]);
 
@@ -205,11 +246,72 @@ export default function Chatbot({ fileIds }) {
 
   // Handler to save session and navigate
   const handleBackToDashboard = async () => {
+    console.log("handleBackToDashboard called");
+    console.log("messages:", messages);
+    console.log("user:", user);
+    console.log("fileIds:", fileIds);
+    console.log("isResuming:", isResuming);
+    console.log("resumedSessionId:", resumedSessionId);
+    
     const hasUserMessage = messages.some((msg) => msg.role === "user");
+    console.log("hasUserMessage:", hasUserMessage);
+    
     if (!hasUserMessage || !user?.email) {
+      console.log("Early return - no user message or no user email");
       router.push("/dashboard");
       return;
     }
+    
+    // If resuming, update the existing session instead of creating new one
+    if (isResuming && resumedSessionId) {
+      const endedAt = new Date().toISOString();
+      
+      // Transform messages to database format with proper structure and metadata
+      const conversationForStorage = messages.map((msg) => {
+        const baseMessage = {
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp ? msg.timestamp.toISOString() : new Date().toISOString(),
+        };
+        
+        // Add type-specific metadata
+        if (msg.type === "summary-table") {
+          baseMessage.message_type = "summary_table";
+          baseMessage.fileSummaries = msg.fileSummaries;
+        } else if (msg.type === "graph") {
+          baseMessage.message_type = "graph";
+          baseMessage.graphType = msg.graphType;
+          baseMessage.graphReason = msg.graphReason;
+        } else {
+          baseMessage.message_type = "text";
+        }
+        
+        return baseMessage;
+      });
+
+      // Update existing session
+      console.log("Updating existing session:", resumedSessionId);
+      console.log("Conversation data:", conversationForStorage);
+      
+      const { error: updateError } = await supabase
+        .from("chatbot_sessions")
+        .update({
+          conversation: conversationForStorage,
+          ended_at: endedAt,
+        })
+        .eq("session_id", resumedSessionId);
+      
+      if (updateError) {
+        console.error("Failed to update chat session:", updateError);
+      } else {
+        console.log("Successfully updated existing session");
+      }
+      router.push("/dashboard");
+      return;
+    }
+    
+    // Create new session (original logic)
     const endedAt = new Date().toISOString();
     const { data, error } = await supabase
       .from("users")
@@ -223,12 +325,40 @@ export default function Chatbot({ fileIds }) {
     }
     const user_id = data.user_id;
 
-    // Transform messages to API format for consistent storage
-    const conversationForStorage = messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
+    // Transform messages to database format with proper structure and metadata
+    const conversationForStorage = messages.map((msg) => {
+      const baseMessage = {
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp ? msg.timestamp.toISOString() : new Date().toISOString(),
+      };
+      
+      // Add type-specific metadata
+      if (msg.type === "summary-table") {
+        baseMessage.message_type = "summary_table";
+        baseMessage.fileSummaries = msg.fileSummaries;
+      } else if (msg.type === "graph") {
+        baseMessage.message_type = "graph";
+        baseMessage.graphType = msg.graphType;
+        baseMessage.graphReason = msg.graphReason;
+      } else {
+        baseMessage.message_type = "text";
+      }
+      
+      return baseMessage;
+    });
 
+    console.log("Creating new session");
+    console.log("Session data:", {
+      session_id: sessionId,
+      user_id,
+      file_ids: fileIds,
+      conversation: conversationForStorage,
+      started_at: startedAt,
+      ended_at: endedAt,
+    });
+    
     const { error: insertError } = await supabase
       .from("chatbot_sessions")
       .insert([
@@ -243,12 +373,24 @@ export default function Chatbot({ fileIds }) {
       ]);
     if (insertError) {
       console.error("Failed to save chat session:", insertError);
+    } else {
+      console.log("Successfully created new session");
     }
     router.push("/dashboard");
   };
 
   useEffect(() => {
     async function fetchFileNames() {
+      // Check if we're resuming a conversation
+      const urlParams = new URLSearchParams(window.location.search);
+      const resumeSessionId = urlParams.get('session');
+      const isResuming = urlParams.get('resume') === 'true';
+      
+      if (resumeSessionId && isResuming) {
+        await resumeConversation(resumeSessionId);
+        return;
+      }
+
       if (!fileIds || fileIds.length === 0) {
         setFileNames([]);
         setLoading(false);
@@ -357,31 +499,80 @@ export default function Chatbot({ fileIds }) {
       let botMessageId = messages.length + (summaryMessage ? 3 : 2);
       let assistantMessageAdded = false;
       const decoder = new TextDecoder();
-      while (!done) {
-        const { value, done: streamDone } = await reader.read();
-        done = streamDone;
-        if (value) {
-          const chunk = decoder.decode(value, { stream: true });
-          botText += chunk;
-          if (!assistantMessageAdded) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: botMessageId,
-                role: "assistant",
-                content: botText,
-                timestamp: new Date(),
-              },
-            ]);
-            assistantMessageAdded = true;
-            setBotLoading(false);
-          } else {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === botMessageId ? { ...msg, content: botText } : msg
-              )
-            );
-          }
+      
+                    // Track if we've received a graph code for this message
+       let graphType = null;
+       
+              while (!done) {
+         const { value, done: streamDone } = await reader.read();
+         done = streamDone;
+         if (value) {
+           const chunk = decoder.decode(value, { stream: true });
+           
+           // First, check if this chunk contains a graph code
+           if (chunk.includes('"type": "graph_code"')) {
+             try {
+               // Extract the graph code from the chunk
+               const graphMatch = chunk.match(/"type": "graph_code", "code": "([^"]+)", "reason": "([^"]+)"/);
+               if (graphMatch) {
+                 const graphCode = graphMatch[1];
+                 const graphReason = graphMatch[2];
+                 graphType = graphCode.replace('GRAPH:', '');
+                 
+                 // Create a separate graph message
+                 const graphMessageId = botMessageId + 0.1;
+                 setMessages(prev => [
+                   ...prev,
+                   {
+                     id: graphMessageId,
+                     role: "assistant",
+                     type: "graph",
+                     graphType: graphType,
+                     graphReason: graphReason,
+                     timestamp: new Date(),
+                   }
+                 ]);
+                 
+                 console.log('Graph message created:', graphType, graphReason);
+                 
+                                   // Don't add the graph code chunk to text content
+                  // Just skip it entirely
+                  continue;
+               } else {
+                 botText += chunk;
+               }
+             } catch (e) {
+               // If graph parsing fails, just add the chunk as text
+               botText += chunk;
+             }
+           } else {
+             // No graph code, just add the chunk as text
+             botText += chunk;
+           }
+          
+                     // Process newlines in the final text content
+           const processedText = botText.replace(/\\n/g, '\n');
+           
+           // Update message content
+           if (!assistantMessageAdded) {
+             setMessages((prev) => [
+               ...prev,
+               {
+                 id: botMessageId,
+                 role: "assistant",
+                 content: processedText,
+                 timestamp: new Date(),
+               },
+             ]);
+             assistantMessageAdded = true;
+             setBotLoading(false);
+           } else {
+             setMessages((prev) =>
+               prev.map((msg) =>
+                 msg.id === botMessageId ? { ...msg, content: processedText } : msg
+               )
+             );
+           }
         }
       }
       setBotLoading(false);
@@ -467,9 +658,11 @@ export default function Chatbot({ fileIds }) {
             </svg>
           </div>
           <div>
-            <h5 className="mb-0 font-bold">Teaching Analytics Chatbot</h5>
+            <h5 className="mb-0 font-bold">
+              {isResuming ? "Resuming Conversation" : "Teaching Analytics Chatbot"}
+            </h5>
             <small className="opacity-75">
-              Ask questions about your lectures
+              {isResuming ? "Continue your previous chat" : "Ask questions about your lectures"}
             </small>
           </div>
         </div>
@@ -480,6 +673,21 @@ export default function Chatbot({ fileIds }) {
           >
             View Summary
           </button>
+          {isResuming && (
+            <button
+              className="bg-green-600 text-white font-semibold px-4 py-2 rounded shadow hover:bg-green-700 transition"
+              onClick={() => {
+                setIsResuming(false);
+                setResumedSessionId(null);
+                setMessages([]);
+                setFileIds([]);
+                setFileNames([]);
+                router.replace('/chatbot');
+              }}
+            >
+              New Chat
+            </button>
+          )}
           <button
             className="bg-white text-blue-600 font-semibold px-4 py-2 rounded shadow hover:bg-blue-50 hover:cursor-pointer transition"
             onClick={handleBackToDashboard}
@@ -502,11 +710,14 @@ export default function Chatbot({ fileIds }) {
               <path d="M9 17v-2a4 4 0 014-4h3a4 4 0 014 4v2" />
               <circle cx="9" cy="7" r="4" />
             </svg>
-            Selected Files for Analysis
+            {isResuming ? "Resuming Analysis of Files" : "Selected Files for Analysis"}
           </div>
           <div className="text-sm mb-2">
-            You've selected <strong>{fileNames.length} file(s)</strong>. You can
-            now ask me anything about these lectures!
+            {isResuming ? (
+              <>You're continuing analysis of <strong>{fileNames.length} file(s)</strong>. You can ask more questions or start a new chat.</>
+            ) : (
+              <>You've selected <strong>{fileNames.length} file(s)</strong>. You can now ask me anything about these lectures!</>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {fileNames.map((name, idx) => (
@@ -523,22 +734,35 @@ export default function Chatbot({ fileIds }) {
 
       <div className="flex-1 overflow-auto p-4 bg-white">
         {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`mb-3 flex ${
-              msg.role === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
-            <div
-              className={`rounded-2xl shadow px-4 py-2 max-w-[70%] ${
-                msg.role === "user"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-800"
-              }`}
-            >
+                     <div
+             key={msg.id}
+             className={`mb-3 flex ${
+               msg.role === "user" ? "justify-end" : "justify-start"
+             } ${msg.type === "graph" ? "justify-center" : ""}`}
+           >
+                         <div
+               className={`rounded-2xl shadow px-4 py-2 ${
+                 msg.role === "user"
+                   ? "bg-blue-600 text-white max-w-[70%]"
+                   : msg.type === "graph"
+                   ? "bg-gray-100 text-gray-800 w-[1400px]"
+                   : "bg-gray-100 text-gray-800 max-w-[70%]"
+               }`}
+             >
               <div>
                 {msg.type === "summary-table" ? (
                   <InlineSummaryTable fileSummaries={msg.fileSummaries} />
+                ) : msg.type === "graph" ? (
+                  <div className="w-full">
+                    <div className="text-sm text-blue-600 mb-2 italic">
+                      💡 {msg.graphReason}
+                    </div>
+                    <GraphRenderer 
+                      graphType={msg.graphType} 
+                      fileIds={fileIds}
+                      messageId={msg.id}
+                    />
+                  </div>
                 ) : msg.role === "assistant" ? (
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 ) : (

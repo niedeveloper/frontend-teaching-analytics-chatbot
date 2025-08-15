@@ -97,6 +97,18 @@ function getAverageStats(allStats) {
   return avg;
 }
 
+// Helper: moving average over an array of numbers
+function computeMovingAverage(values, windowSize) {
+  const res = [];
+  for (let i = 0; i < values.length; i += 1) {
+    const start = Math.max(0, i - windowSize + 1);
+    const slice = values.slice(start, i + 1);
+    const avg = slice.reduce((s, v) => s + (Number(v) || 0), 0) / slice.length;
+    res.push(Number.isFinite(avg) ? avg : 0);
+  }
+  return res;
+}
+
 export default function Modal({ open, onClose, fileSummaries = [] }) {
   // All hooks must be called before any return
   // Refs for visible charts
@@ -117,13 +129,12 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
       buildWpmChartData();
       buildAreaDistributionData();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, fileSummaries]);
   if (!open) return null;
 
   // Parse all summaries to aligned stats objects
   const allStats = fileSummaries.map((f) =>
-    parseTeachingAreaStats((f.data_summary || "").replace(/\\n/g, "\n"))
+    parseTeachingAreaStats((f.data_summary || "").replace(/\n/g, "\n"))
   );
   const chartDatas = allStats.map(statsToChartData);
   const averageStats = getAverageStats(allStats);
@@ -138,10 +149,74 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
     const entry = { code: code.split(" ")[0] };
     fileSummaries.forEach((file, idx) => {
       const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
-      entry[lessonNames[idx]] = getStatValue(stats[code], displayMode);
+      entry[lessonNames[idx]] = displayMode === 'percent' ? (stats[code]?.percent || 0) : (stats[code]?.value || 0);
     });
     return entry;
   });
+  // Add single aggregated moving average trendline to groupedBarData
+  const groupedBarAgg = groupedBarData.map((row) => {
+    const values = lessonNames.map((ln) => Number(row[ln]) || 0);
+    const avg = values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
+    return { ...row, __agg: avg };
+  });
+  const groupedBarTrend = computeMovingAverage(groupedBarAgg.map((r) => r.__agg), 3);
+  const groupedBarDataWithTrend = groupedBarAgg.map((r, i) => ({ ...r, __trend: groupedBarTrend[i] }));
+
+  // Total Distribution data refactor (precompute)
+  const totalDistDataBase = TEACHING_AREA_CODES.map((code, idx) => {
+    if (displayMode === 'value') {
+      let total = 0;
+      fileSummaries.forEach((file) => {
+        const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
+        total += stats[code]?.value || 0;
+      });
+      return { code: code.split(" ")[0], y: total };
+    } else {
+      // average percent across lessons for this area
+      const percents = fileSummaries.map((file) => {
+        const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
+        return stats[code]?.percent || 0;
+      });
+      const avg = percents.length ? percents.reduce((s, v) => s + v, 0) / percents.length : 0;
+      return { code: code.split(" ")[0], y: avg };
+    }
+  });
+  const totalDistTrend = computeMovingAverage(totalDistDataBase.map((d) => d.y), 3);
+  const totalDistData = totalDistDataBase.map((d, i) => ({ ...d, __trend: totalDistTrend[i] }));
+
+  // Line chart (Utterances per Teaching Area Across Lessons) data precompute with aggregated trend
+  const lineChartData = fileSummaries.map((file, idx) => {
+    const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
+    const entry = { lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`) };
+    TEACHING_AREA_CODES.forEach((code) => {
+      entry[code] = displayMode === 'percent' ? (stats[code]?.percent || 0) : (stats[code]?.value || 0);
+    });
+    // aggregate across all areas (or selected areas)
+    const areaValues = TEACHING_AREA_CODES.map((code) => Number(entry[code]) || 0);
+    entry.__agg = areaValues.length ? areaValues.reduce((s, v) => s + v, 0) / areaValues.length : 0;
+    return entry;
+  });
+  const lineTrend = computeMovingAverage(lineChartData.map((d) => d.__agg), 1);
+  const lineChartDataWithTrend = lineChartData.map((d, i) => ({ ...d, __trend: lineTrend[i] }));
+
+  // WPM trend (average across lessons per interval, then moving average)
+  const wpmDataWithTrend = wpmChartData.map((row) => {
+    const values = lessonNames.map((ln) => Number(row[ln]) || 0);
+    const avg = values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
+    return { ...row, __agg: avg };
+  });
+  const wpmTrend = computeMovingAverage(wpmDataWithTrend.map((r) => r.__agg), 1);
+  const wpmChartDataWithTrend = wpmDataWithTrend.map((r, i) => ({ ...r, __trend: wpmTrend[i] }));
+
+  // Area distribution trend (avg across area codes per interval, moving average)
+  const AREA_CODES_ONLY = ["1.1","1.2","3.1","3.2","3.3","3.4","3.5","4.1"];
+  const areaDistTrendVals = areaDistributionData.map((row) => {
+    const vals = AREA_CODES_ONLY.map((code) => Number(row[code]) || 0);
+    const avg = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
+    return avg;
+  });
+  const areaDistTrend = computeMovingAverage(areaDistTrendVals, 1);
+  const areaDistributionDataWithTrend = areaDistributionData.map((row, i) => ({ ...row, __trend: areaDistTrend[i] }));
 
   async function buildWpmChartData() {
     const fileIds = (fileSummaries || []).map((f) => f.file_id).filter(Boolean);
@@ -453,24 +528,24 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
             <div className="h-[400px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={groupedBarData}
+                  data={groupedBarDataWithTrend}
                   margin={{ top: 20, right: 120, left: 60, bottom: 40 }}
                   barCategoryGap={20}
                 >
-                                  <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="code" 
-                  tick={{ fontSize: 15, fontWeight: 600 }} 
-                  height={40} 
-                  interval={0}
-                  label={{ value: "Teaching Areas", position: "insideBottom", dy: 10 }}
-                />
-                <YAxis 
-                  tickFormatter={yAxisTickFormatter}
-                  label={{ value: displayMode === 'percent' ? "Percentage of Utterances (%)" : "Number of Utterances", angle: -90, position: "insideLeft", dy: 80 }}
-                />
-                <Tooltip formatter={tooltipFormatter} />
-                <Legend verticalAlign="top" align="center" />
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="code" 
+                    tick={{ fontSize: 15, fontWeight: 600 }} 
+                    height={40} 
+                    interval={0}
+                    label={{ value: "Teaching Areas", position: "insideBottom", dy: 10 }}
+                  />
+                  <YAxis 
+                    tickFormatter={yAxisTickFormatter}
+                    label={{ value: displayMode === 'percent' ? "Percentage of Utterances (%)" : "Number of Utterances", angle: -90, position: "insideLeft", dy: 80 }}
+                  />
+                  <Tooltip formatter={tooltipFormatter} />
+                  <Legend verticalAlign="top" align="center" />
                   {lessonNames.map((lesson, idx) => (
                     <Bar
                       key={lesson}
@@ -494,40 +569,15 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
             <div className="h-[400px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={TEACHING_AREA_CODES.map((code, idx) => {
-                    if (displayMode === 'value') {
-                      // Sum utterances for each area across all lessons
-                      let total = 0;
-                      fileSummaries.forEach((file) => {
-                        const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
-                        total += stats[code]?.value || 0;
-                      });
-                      return { code: code.split(" ")[0], value: total };
-                    } else {
-                      // Use average percent as before
-                      return {
-                        code: code.split(" ")[0],
-                        percent: averageStats[idx]?.percent || 0,
-                      };
-                    }
-                  })}
+                  data={totalDistData}
                   margin={{ top: 20, right: 120, left: 60, bottom: 40 }}
                   barCategoryGap={20}
                 >
-                                  <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="code" 
-                  tick={{ fontSize: 15, fontWeight: 600 }} 
-                  height={40} 
-                  interval={0}
-                  label={{ value: "Teaching Areas", position: "insideBottom", dy: 10 }}
-                />
-                <YAxis 
-                  tickFormatter={yAxisTickFormatter}
-                  label={{ value: displayMode === 'percent' ? "Percentage of Utterances (%)" : "Number of Utterances", angle: -90, position: "insideLeft", dy: 80 }}
-                />
-                <Tooltip formatter={tooltipFormatter} />
-                <Bar dataKey={displayMode === 'value' ? 'value' : 'percent'} fill={LINE_COLORS[0]} radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="code" tick={{ fontSize: 15, fontWeight: 600 }} height={40} interval={0} label={{ value: "Teaching Areas", position: "insideBottom", dy: 10 }} />
+                  <YAxis tickFormatter={yAxisTickFormatter} label={{ value: displayMode === 'percent' ? 'Percentage of Utterances (%)' : 'Number of Utterances', angle: -90, position: 'insideLeft', dy: 80 }} />
+                  <Tooltip formatter={tooltipFormatter} />
+                  <Bar dataKey="y" name={displayMode === 'value' ? 'Value' : 'Percent'} fill={LINE_COLORS[0]} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -579,44 +629,18 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
                 <div className="flex-1 h-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
-                      data={fileSummaries.map((file, idx) => {
-                        const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
-                        const entry = { lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`) };
-                        TEACHING_AREA_CODES.forEach((code) => {
-                          entry[code] = getStatValue(stats[code], displayMode);
-                        });
-                        return entry;
-                      })}
+                      data={lineChartDataWithTrend}
                       margin={{ top: 20, right: 120, left: 60, bottom: 40 }}
                     >
-                                          <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="lesson" 
-                      tick={{ fontSize: 12, fontWeight: 600, dy: 16 }} 
-                      angle={0} 
-                      textAnchor="middle" 
-                      height={60} 
-                      interval={0}
-                      label={{ value: "Lessons", position: "insideBottom", dy: 25 }}
-                    />
-                    <YAxis 
-                      tickFormatter={yAxisTickFormatter}
-                      label={{ value: displayMode === 'percent' ? "Percentage of Utterances (%)" : "Number of Utterances", angle: -90, position: "insideLeft", dy: 80 }}
-                    />
-                    <Tooltip formatter={tooltipFormatter} />
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="lesson" tick={{ fontSize: 12, fontWeight: 600, dy: 16 }} angle={0} textAnchor="middle" height={60} interval={0} label={{ value: "Lessons", position: "insideBottom", dy: 25 }} />
+                      <YAxis tickFormatter={yAxisTickFormatter} label={{ value: displayMode === 'percent' ? 'Percentage of Utterances (%)' : 'Number of Utterances', angle: -90, position: 'insideLeft', dy: 80 }} />
+                      <Tooltip formatter={tooltipFormatter} />
                       {/* No Legend here, since we have our own */}
                       {TEACHING_AREA_CODES.filter((code) => selectedAreas.includes(code)).map((code, idx) => (
-                        <Line
-                          key={code}
-                          type="linear"
-                          dataKey={code}
-                          name={code.split(" ")[0]}
-                          stroke={LINE_COLORS[idx % LINE_COLORS.length]}
-                          strokeWidth={3}
-                          dot={{ r: 6, stroke: LINE_COLORS[idx % LINE_COLORS.length], strokeWidth: 2, fill: '#fff' }}
-                          activeDot={{ r: 8 }}
-                        />
+                        <Line key={code} type="linear" dataKey={code} name={code.split(" ")[0]} stroke={LINE_COLORS[idx % LINE_COLORS.length]} strokeWidth={3} dot={{ r: 6, stroke: LINE_COLORS[idx % LINE_COLORS.length], strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 8 }} />
                       ))}
+                      <Line type="linear" dataKey="__trend" name="Trend (SMA)" stroke="#111827" strokeDasharray="5 5" dot={false} isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -639,7 +663,7 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
               <div className="h-[500px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
-                    data={areaDistributionData}
+                    data={areaDistributionDataWithTrend}
                     margin={{ top: 20, right: 50, left: 20, bottom: 40 }}
                     barCategoryGap={11}
                     barGap={10}
@@ -671,15 +695,10 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
                       };
                       
                       return Object.keys(teachingAreaLabels).map((areaCode, areaIdx) => (
-                        <Bar
-                          key={areaCode}
-                          dataKey={areaCode}
-                          name={areaCode}
-                          fill={LINE_COLORS[areaIdx % LINE_COLORS.length]}
-                          radius={[4, 4, 0, 0]}
-                        />
+                        <Bar key={areaCode} dataKey={areaCode} name={areaCode} fill={LINE_COLORS[areaIdx % LINE_COLORS.length]} radius={[4, 4, 0, 0]} />
                       ));
                     })()}
+                    <Line type="linear" dataKey="__trend" name="Trend (SMA)" stroke="#111827" strokeDasharray="5 5" dot={false} isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -701,7 +720,7 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
               <div className="h-[500px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
-                    data={wpmChartData}
+                    data={wpmChartDataWithTrend}
                     margin={{ top: 20, right: 120, left: 60, bottom: 40 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
@@ -719,20 +738,9 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
                     <Tooltip />
                     <Legend verticalAlign="top" align="center" />
                     {lessonNames.map((lesson, idx) => (
-                      <Area
-                        key={lesson}
-                        type="monotone"
-                        dataKey={lesson}
-                        name={lesson}
-                        stroke={LINE_COLORS[idx % LINE_COLORS.length]}
-                        fill={LINE_COLORS[idx % LINE_COLORS.length]}
-                        fillOpacity={0.15}
-                        strokeWidth={3}
-                        dot={{ r: 3 }}
-                        activeDot={{ r: 5 }}
-                        stackId="1"
-                      />
+                      <Area key={lesson} type="monotone" dataKey={lesson} name={lesson} stroke={LINE_COLORS[idx % LINE_COLORS.length]} fill={LINE_COLORS[idx % LINE_COLORS.length]} fillOpacity={0.15} strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} stackId="1" />
                     ))}
+                    <Line type="linear" dataKey="__trend" name="Trend (SMA)" stroke="#111827" strokeDasharray="5 5" dot={false} isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
