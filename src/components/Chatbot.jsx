@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
 import { askChatbot, fetchLessonSummaries } from "../lib/api";
@@ -178,9 +178,14 @@ function uniqueId() {
 }
 
 export default function Chatbot({ fileIds: initialFileIds }) {
-  const [fileNames, setFileNames] = useState([]);
+  // Memoize empty arrays to prevent unnecessary re-renders
+  const emptyArray = useMemo(() => [], []);
+  const emptyLessonFilter = useMemo(() => [], []);
+  const emptyAreaFilter = useMemo(() => [], []);
+  
+  const [fileNames, setFileNames] = useState(emptyArray);
   const [loading, setLoading] = useState(true);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(emptyArray);
   const [input, setInput] = useState("");
   const [botLoading, setBotLoading] = useState(false);
   const messagesEndRef = useRef(null);
@@ -191,8 +196,8 @@ export default function Chatbot({ fileIds: initialFileIds }) {
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
   const [resumedSessionId, setResumedSessionId] = useState(null);
-  const [fileIds, setFileIds] = useState(initialFileIds || []);
-
+  const [fileIds, setFileIds] = useState(initialFileIds || emptyArray);
+  
   // Session info
   const [sessionId] = useState(() =>
     crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
@@ -218,10 +223,10 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       }
 
       // Set conversation state
-      setFileIds(session.file_ids || []);
+      setFileIds(session.file_ids || emptyArray);
       // For now, just show file IDs since we don't have file names
-      setFileNames(session.file_ids?.map(id => `File ${id}`) || []);
-      setMessages(session.conversation || []);
+      setFileNames(session.file_ids?.map(id => `File ${id}`) || emptyArray);
+      setMessages(session.conversation || emptyArray);
       setResumedSessionId(sessionId);
       setIsResuming(true);
 
@@ -236,7 +241,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
     }
   };
 
-  const [fileSummaries, setFileSummaries] = useState([]);
+  const [fileSummaries, setFileSummaries] = useState(emptyArray);
 
   // Ref to always have the latest messages
   const messagesRef = useRef(messages);
@@ -392,7 +397,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       }
 
       if (!fileIds || fileIds.length === 0) {
-        setFileNames([]);
+        setFileNames(emptyArray);
         setLoading(false);
         return;
       }
@@ -402,7 +407,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
         .select("file_id, stored_filename")
         .in("file_id", fileIds);
       if (error) {
-        setFileNames([]);
+        setFileNames(emptyArray);
       } else {
         setFileNames(data.map((f) => f.stored_filename));
       }
@@ -417,23 +422,21 @@ export default function Chatbot({ fileIds: initialFileIds }) {
     }
   }, [messages]);
 
+  // Memoize the initial welcome message to prevent recreation
+  const initialMessage = useMemo(() => ({
+    id: 1,
+    role: "assistant",
+    content: fileNames.length > 0
+      ? `Hello! I'm your Teaching Analytics Chatbot. I can see you've selected these files to analyze: "${fileNames.join(", ")}". You can ask me anything about these lectures!`
+      : "Hello! I'm your Teaching Analytics Chatbot. How can I help you with your lecture questions today?",
+    timestamp: new Date(),
+  }), [fileNames]);
+
   useEffect(() => {
     if (!loading && messages.length === 0) {
-      setMessages([
-        {
-          id: 1,
-          role: "assistant",
-          content:
-            fileNames.length > 0
-              ? `Hello! I'm your Teaching Analytics Chatbot. I can see you've selected these files to analyze: "${fileNames.join(
-                  ", "
-                )}". You can ask me anything about these lectures!`
-              : "Hello! I'm your Teaching Analytics Chatbot. How can I help you with your lecture questions today?",
-          timestamp: new Date(),
-        },
-      ]);
+      setMessages([initialMessage]);
     }
-  }, [loading, fileNames, messages.length]);
+  }, [loading, fileNames, initialMessage]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -451,7 +454,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       setMessages((prev) => [
         ...prev,
         {
-          id: messages.length + 2,
+          id: messages.length + 1,
           role: "user",
           content: input,
           timestamp: new Date(),
@@ -500,55 +503,82 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       let assistantMessageAdded = false;
       const decoder = new TextDecoder();
       
-                    // Track if we've received a graph code for this message
-       let graphType = null;
-       
-              while (!done) {
-         const { value, done: streamDone } = await reader.read();
-         done = streamDone;
-         if (value) {
-           const chunk = decoder.decode(value, { stream: true });
-           
-           // First, check if this chunk contains a graph code
-           if (chunk.includes('"type": "graph_code"')) {
-             try {
-               // Extract the graph code from the chunk
-               const graphMatch = chunk.match(/"type": "graph_code", "code": "([^"]+)", "reason": "([^"]+)"/);
-               if (graphMatch) {
-                 const graphCode = graphMatch[1];
-                 const graphReason = graphMatch[2];
-                 graphType = graphCode.replace('GRAPH:', '');
-                 
-                 // Create a separate graph message
-                 const graphMessageId = botMessageId + 0.1;
-                 setMessages(prev => [
-                   ...prev,
-                   {
-                     id: graphMessageId,
-                     role: "assistant",
-                     type: "graph",
-                     graphType: graphType,
-                     graphReason: graphReason,
-                     timestamp: new Date(),
-                   }
-                 ]);
-                 
-                 console.log('Graph message created:', graphType, graphReason);
-                 
-                                   // Don't add the graph code chunk to text content
-                  // Just skip it entirely
-                  continue;
-               } else {
-                 botText += chunk;
-               }
-             } catch (e) {
-               // If graph parsing fails, just add the chunk as text
-               botText += chunk;
-             }
-           } else {
-             // No graph code, just add the chunk as text
-             botText += chunk;
-           }
+      // Track if we've received graph codes for this message
+      let graphTypesReceived = [];
+      
+      while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        done = streamDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          
+          // Check if this chunk contains a graph signal
+          if (chunk.includes('"type": "graph_code"')) {
+            console.log('DEBUG: Found graph_code chunk:', chunk);
+            try {
+              // Parse the chunk - handle multiple graph codes per chunk
+              const graphDataMatches = chunk.matchAll(/data:\s*({[^}]+})/g);
+              let processedGraphs = false;
+              
+              for (const match of graphDataMatches) {
+                try {
+                  const graphData = JSON.parse(match[1]);
+                  
+                  // Check if we have valid graph data
+                  if (graphData && graphData.type === "graph_code") {
+                    const graphType = graphData.code.replace('GRAPH:', '');
+                    const graphReason = graphData.reason;
+                    const lessonFilter = graphData.lesson_filter || emptyLessonFilter;
+                    const areaFilter = graphData.area_filter || emptyAreaFilter;
+                    
+                    // Check if we've already received this graph type to avoid duplicates
+                    if (!graphTypesReceived.includes(graphType)) {
+                      graphTypesReceived.push(graphType);
+                      
+                      // Create a separate graph message for each graph type
+                      const graphMessageId = botMessageId + (graphTypesReceived.length * 0.1);
+                      setMessages(prev => [
+                        ...prev,
+                        {
+                          id: graphMessageId,
+                          role: "assistant",
+                          type: "graph",
+                          graphType: graphType,
+                          graphReason: graphReason,
+                          lessonFilter: lessonFilter,
+                          areaFilter: areaFilter,
+                          timestamp: new Date(),
+                        }
+                      ]);
+                      
+                      console.log('Graph message created:', graphType, graphReason, 'Lesson Filter:', lessonFilter, 'Area Filter:', areaFilter);
+                      console.log('DEBUG: graphTypesReceived array:', graphTypesReceived);
+                    }
+                    
+                    processedGraphs = true;
+                  }
+                } catch (parseError) {
+                  console.warn('Failed to parse JSON from data chunk:', parseError);
+                  // Continue processing other matches
+                }
+              }
+              
+              // If we processed any graphs, skip adding this chunk to text
+              if (processedGraphs) {
+                continue;
+              } else {
+                // No valid graphs found, add to text
+                botText += chunk;
+              }
+            } catch (e) {
+              // If graph parsing fails, just add the chunk as text
+              console.warn('Failed to parse graph data:', e);
+              botText += chunk;
+            }
+          } else {
+            // No graph code, just add the chunk as text
+            botText += chunk;
+          }
           
                      // Process newlines in the final text content
            const processedText = botText.replace(/\\n/g, '\n');
@@ -599,7 +629,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
   };
 
   const formatTime = (timestamp) =>
-    new Date(timestamp).toLocaleTimeString([], {
+    new Date(timestamp).toLocaleTimeString(emptyArray, {
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -615,6 +645,8 @@ export default function Chatbot({ fileIds: initialFileIds }) {
 
   // Call this when opening the modal:
   const handleOpenModal = async () => {
+    const fileSummaries = await fetchLessonSummaries(fileIds);
+    setFileSummaries(fileSummaries || emptyArray);
     await fetchFileSummaries();
     setShowModal(true);
   };
@@ -679,9 +711,9 @@ export default function Chatbot({ fileIds: initialFileIds }) {
               onClick={() => {
                 setIsResuming(false);
                 setResumedSessionId(null);
-                setMessages([]);
-                setFileIds([]);
-                setFileNames([]);
+                setMessages(emptyArray);
+                setFileIds(emptyArray);
+                setFileNames(emptyArray);
                 router.replace('/chatbot');
               }}
             >
@@ -761,6 +793,8 @@ export default function Chatbot({ fileIds: initialFileIds }) {
                       graphType={msg.graphType} 
                       fileIds={fileIds}
                       messageId={msg.id}
+                      lessonFilter={msg.lessonFilter || emptyLessonFilter}
+                      areaFilter={msg.areaFilter || emptyAreaFilter}
                     />
                   </div>
                 ) : msg.role === "assistant" ? (

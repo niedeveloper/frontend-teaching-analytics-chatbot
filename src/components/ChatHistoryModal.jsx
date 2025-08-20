@@ -797,6 +797,8 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
                           graphType={msg.graphType} 
                           fileIds={chatSession.file_ids || []}
                           messageId={msg.id}
+                          lessonFilter={msg.lessonFilter || []}
+                          areaFilter={msg.areaFilter || []}
                         />
                       </div>
                     </div>

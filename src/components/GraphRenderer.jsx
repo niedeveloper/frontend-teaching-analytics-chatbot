@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { fetchChunksByFileIds } from '../lib/api';
 import { supabase } from '../lib/supabaseClient';
 import { toPng } from "html-to-image";
@@ -58,7 +58,7 @@ function stripXlsx(filename) {
   return filename.replace(/\.xlsx$/i, "");
 }
 
-export default function GraphRenderer({ graphType, fileIds, messageId }) {
+function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaFilter = [] }) {
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -70,23 +70,45 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
   const utteranceTimelineRef = useRef();
   const wpmChartRef = useRef();
   const areaDistributionRef = useRef();
+  
+  // Ref to prevent duplicate calls
+  const isFetchingRef = useRef(false);
+  
+  // Memoize filter arrays to prevent unnecessary re-renders
+  const memoizedLessonFilter = useMemo(() => lessonFilter, [lessonFilter]);
+  const memoizedAreaFilter = useMemo(() => areaFilter, [areaFilter]);
 
   useEffect(() => {
-    if (graphType && fileIds) {
+    if (graphType && fileIds && !isFetchingRef.current) {
       fetchFileSummaries();
     }
-  }, [graphType, fileIds]);
+    
+    // Cleanup function
+    return () => {
+      isFetchingRef.current = false;
+    };
+  }, [graphType, fileIds, memoizedLessonFilter, memoizedAreaFilter]);
 
   const fetchFileSummaries = async () => {
+    // Prevent duplicate calls
+    if (isFetchingRef.current) {
+      return;
+    }
+    
+    isFetchingRef.current = true;
+    
     try {
       setLoading(true);
       setError(null);
+      
+      // Determine which file IDs to use based on lesson filter
+      const effectiveFileIds = memoizedLessonFilter.length > 0 ? memoizedLessonFilter : fileIds;
       
       // Fetch file summaries to get file names and other metadata
       const { data, error } = await supabase
         .from("files")
         .select("file_id, stored_filename, data_summary")
-        .in("file_id", fileIds);
+        .in("file_id", effectiveFileIds);
       
       if (error) {
         throw error;
@@ -96,7 +118,7 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
       
       if (graphType === 'wpm_trend' || graphType === 'area_distribution_time') {
         // These charts need chunk data
-        const chunks = await fetchChunksByFileIds(fileIds);
+        const chunks = await fetchChunksByFileIds(effectiveFileIds);
         if (chunks.length === 0) {
           setError("No chunk data available for this chart");
           setLoading(false);
@@ -104,13 +126,68 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
         }
         
         if (graphType === 'wpm_trend') {
-          setChartData(buildWpmChartData(chunks, data || []));
+          const wpmData = buildWpmChartData(chunks, data || []);
+          console.log(`DEBUG: Built wpm_trend data:`, wpmData);
+          setChartData(wpmData);
         } else if (graphType === 'area_distribution_time') {
-          setChartData(buildAreaDistributionData(chunks));
+          const areaData = buildAreaDistributionData(chunks);
+          console.log(`DEBUG: Built area_distribution_time data:`, areaData);
+          setChartData(areaData);
         }
       } else {
-        // These charts work with summary data only
-        setChartData([]);
+        // These charts work with summary data only - build the data here
+        if (graphType === 'teaching_area_distribution') {
+          // Build teaching area distribution data from summaries
+          const teachingAreaLessonNames = data.map((file, idx) => stripXlsx(file.stored_filename || `Lesson #${idx + 1}`));
+          const effectiveAreaCodes = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : TEACHING_AREA_CODES.map(code => code.split(" ")[0]);
+          
+          const groupedBarData = effectiveAreaCodes.map((code) => {
+            const entry = { code: code };
+            data.forEach((file, idx) => {
+              const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
+              entry[teachingAreaLessonNames[idx]] = stats[code]?.percent || 0;
+            });
+            return entry;
+          });
+          
+          console.log(`DEBUG: Built teaching_area_distribution data:`, groupedBarData);
+          setChartData(groupedBarData);
+          
+        } else if (graphType === 'total_distribution') {
+          // Build total distribution data from summaries
+          const effectiveAreaCodes = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : TEACHING_AREA_CODES.map(code => code.split(" ")[0]);
+          
+          const totalDistData = effectiveAreaCodes.map((code) => {
+            const percents = data.map((file) => {
+              const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
+              return stats[code]?.percent || 0;
+            });
+            const avg = percents.length ? percents.reduce((s, v) => s + v, 0) / percents.length : 0;
+            return { code: code, y: avg };
+          });
+          
+          console.log(`DEBUG: Built total_distribution data:`, totalDistData);
+          setChartData(totalDistData);
+          
+        } else if (graphType === 'utterance_timeline') {
+          // Build utterance timeline data from summaries
+          const effectiveAreaCodes = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : TEACHING_AREA_CODES.map(code => code.split(" ")[0]);
+          const lineChartData = data.map((file, idx) => {
+            const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
+            const entry = { lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`) };
+            effectiveAreaCodes.forEach((code) => {
+              entry[code] = stats[code]?.percent || 0;
+            });
+            return entry;
+          });
+          
+          console.log(`DEBUG: Built utterance_timeline data:`, lineChartData);
+          setChartData(lineChartData);
+          
+        } else {
+          // Unknown graph type
+          setChartData([]);
+        }
       }
       
       setLoading(false);
@@ -118,6 +195,9 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
       console.error('Error building chart data:', err);
       setError('Failed to load chart data');
       setLoading(false);
+    } finally {
+      // Always reset the fetching flag
+      isFetchingRef.current = false;
     }
   };
 
@@ -181,8 +261,11 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
         }
       }
       
+      // Filter areas based on areaFilter if specified
+      const effectiveAreas = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : Object.keys(areaDistribution);
+      
       // Add frequencies for each teaching area
-      Object.keys(areaDistribution).forEach(areaCode => {
+      effectiveAreas.forEach(areaCode => {
         if (seqToAreas.get(seq)[areaCode]) {
           seqToAreas.get(seq)[areaCode] += Number(areaDistribution[areaCode]) || 0;
         } else {
@@ -192,6 +275,48 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
     });
     
     return Array.from(seqToAreas.values());
+  };
+
+  // Helper function to parse teaching area statistics from file summaries
+  const parseTeachingAreaStats = (summary) => {
+    const lines = summary.split("\n");
+    const stats = {};
+    let inStats = false;
+    
+    for (const line of lines) {
+      if (line.startsWith("TEACHING AREA STATISTICS:")) {
+        inStats = true;
+        continue;
+      }
+      if (inStats) {
+        if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) {
+          break;
+        }
+        const match = line.match(
+          /^([^.]+\.\d [^:]+): (\d+) utterances \(([\d.]+)%\)/
+        );
+        if (match) {
+          const fullAreaName = match[1].trim();
+          const areaCode = fullAreaName.split(" ")[0]; // Extract "1.1" from "1.1 Establishing Interaction and rapport"
+          stats[areaCode] = {
+            value: parseInt(match[2], 10),
+            percent: parseFloat(match[3]),
+          };
+        } else {
+        }
+      }
+    }
+    
+    // Fill missing areas as 0 for uniformity
+    const effectiveAreaCodes = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : TEACHING_AREA_CODES.map(code => code.split(" ")[0]);
+    
+    effectiveAreaCodes.forEach((code) => {
+      if (!stats[code]) {
+        stats[code] = { value: 0, percent: 0 };
+      }
+    });
+    
+    return stats;
   };
 
   // Download function for charts
@@ -231,56 +356,25 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
       );
     }
 
+    // Debug: Log chartData for troubleshooting multiple graphs
+    console.log(`DEBUG: Rendering ${graphType} with chartData:`, chartData, 'length:', chartData?.length);
+
     switch (graphType) {
       case 'teaching_area_distribution':
-        // Use exact same chart implementation as Modal.jsx
+        // Use chartData from state instead of re-parsing
+        if (!chartData || chartData.length === 0) {
+          return (
+            <div className="text-center p-4 text-gray-500 bg-gray-50 rounded-lg">
+              Loading chart data...
+            </div>
+          );
+        }
+        
+        // Get lesson names from fileSummaries for display
         const teachingAreaLessonNames = fileSummaries.map((file, idx) => stripXlsx(file.stored_filename || `Lesson #${idx + 1}`));
         
-        // Parse teaching area stats for each file
-        function parseTeachingAreaStats(summary) {
-          const lines = summary.split("\n");
-          const stats = {};
-          let inStats = false;
-          for (const line of lines) {
-            if (line.startsWith("TEACHING AREA STATISTICS:")) {
-              inStats = true;
-              continue;
-            }
-            if (inStats) {
-              if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) break;
-              const match = line.match(
-                /^([^.]+\.\d [^:]+): (\d+) utterances \(([\d.]+)%\)/
-              );
-              if (match) {
-                stats[match[1].trim()] = {
-                  value: parseInt(match[2], 10),
-                  percent: parseFloat(match[3]),
-                };
-              }
-            }
-          }
-          // Fill missing areas as 0 for uniformity
-          TEACHING_AREA_CODES.forEach((code) => {
-            if (!stats[code]) stats[code] = { value: 0, percent: 0 };
-          });
-          return stats;
-        }
-
-        const allStats = fileSummaries.map((f) =>
-          parseTeachingAreaStats((f.data_summary || "").replace(/\n/g, "\n"))
-        );
-
-        const groupedBarData = TEACHING_AREA_CODES.map((code) => {
-          const entry = { code: code.split(" ")[0] };
-          fileSummaries.forEach((file, idx) => {
-            const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
-            entry[teachingAreaLessonNames[idx]] = stats[code]?.percent || 0;
-          });
-          return entry;
-        });
-
-        // Add aggregated moving average trendline
-        const groupedBarAgg = groupedBarData.map((row) => {
+        // Add aggregated moving average trendline to existing chartData
+        const groupedBarAgg = chartData.map((row) => {
           const values = teachingAreaLessonNames.map((ln) => Number(row[ln]) || 0);
           const avg = values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
           return { ...row, __agg: avg };
@@ -341,38 +435,18 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
         );
 
       case 'total_distribution':
-        // Use exact same chart implementation as Modal.jsx
-        const totalDistDataBase = TEACHING_AREA_CODES.map((code, idx) => {
-          // Calculate average percent across lessons for this area
-          const percents = fileSummaries.map((file) => {
-            const lines = file.data_summary?.split("\n") || [];
-            const stats = {};
-            let inStats = false;
-            for (const line of lines) {
-              if (line.startsWith("TEACHING AREA STATISTICS:")) {
-                inStats = true;
-                continue;
-              }
-              if (inStats) {
-                if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) break;
-                const match = line.match(
-                  /^([^.]+\.\d [^:]+): (\d+) utterances \(([\d.]+)%\)/
-                );
-                if (match) {
-                  stats[match[1].trim()] = {
-                    value: parseInt(match[2], 10),
-                    percent: parseFloat(match[3]),
-                  };
-                }
-              }
-            }
-            return stats[code]?.percent || 0;
-          });
-          const avg = percents.length ? percents.reduce((s, v) => s + v, 0) / percents.length : 0;
-          return { code: code.split(" ")[0], y: avg };
-        });
-        const totalDistTrend = computeMovingAverage(totalDistDataBase.map((d) => d.y), 3);
-        const totalDistData = totalDistDataBase.map((d, i) => ({ ...d, __trend: totalDistTrend[i] }));
+        // Use chartData from state instead of re-parsing
+        if (!chartData || chartData.length === 0) {
+          return (
+            <div className="text-center p-4 text-gray-500 bg-gray-50 rounded-lg">
+              Loading chart data...
+            </div>
+          );
+        }
+        
+        // Add trend data to existing chartData
+        const totalDistTrend = computeMovingAverage(chartData.map((d) => d.y), 3);
+        const totalDistDataWithTrend = chartData.map((d, i) => ({ ...d, __trend: totalDistTrend[i] }));
 
         return (
           <div className="w-full bg-white rounded-lg p-6 border relative">
@@ -392,7 +466,7 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
               <div className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
-                    data={totalDistData}
+                    data={totalDistDataWithTrend}
                     margin={{ top: 20, right: 120, left: 60, bottom: 40 }}
                     barCategoryGap={20}
                   >
@@ -409,41 +483,18 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
         );
 
       case 'utterance_timeline':
-        // Use exact same chart implementation as Modal.jsx
-        const lineChartData = fileSummaries.map((file, idx) => {
-          const lines = file.data_summary?.split("\n") || [];
-          const stats = {};
-          let inStats = false;
-          for (const line of lines) {
-            if (line.startsWith("TEACHING AREA STATISTICS:")) {
-              inStats = true;
-              continue;
-            }
-            if (inStats) {
-              if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) break;
-              const match = line.match(
-                /^([^.]+\.\d [^:]+): (\d+) utterances \(([\d.]+)%\)/
-              );
-              if (match) {
-                stats[match[1].trim()] = {
-                  value: parseInt(match[2], 10),
-                  percent: parseFloat(match[3]),
-                };
-              }
-            }
-          }
-          
-          const entry = { lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`) };
-          TEACHING_AREA_CODES.forEach((code) => {
-            entry[code] = stats[code]?.percent || 0;
-          });
-          // aggregate across all areas
-          const areaValues = TEACHING_AREA_CODES.map((code) => Number(entry[code]) || 0);
-          entry.__agg = areaValues.length ? areaValues.reduce((s, v) => s + v, 0) / areaValues.length : 0;
-          return entry;
-        });
-        const lineTrend = computeMovingAverage(lineChartData.map((d) => d.__agg), 1);
-        const lineChartDataWithTrend = lineChartData.map((d, i) => ({ ...d, __trend: lineTrend[i] }));
+        // Use chartData from state instead of re-parsing
+        if (!chartData || chartData.length === 0) {
+          return (
+            <div className="text-center p-4 text-gray-500 bg-gray-50 rounded-lg">
+              Loading chart data...
+            </div>
+          );
+        }
+        
+        // Add trend data to existing chartData
+        const lineTrend = computeMovingAverage(chartData.map((d) => d.__agg || 0), 1);
+        const lineChartDataWithTrend = chartData.map((d, i) => ({ ...d, __trend: lineTrend[i] }));
 
         return (
           <div className="w-full bg-white rounded-lg p-6 border relative">
@@ -474,7 +525,7 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
                       />
                       All
                     </label>
-                    {TEACHING_AREA_CODES.map((code, idx) => (
+                    {chartData.length > 0 && Object.keys(chartData[0]).filter(key => key !== 'lesson' && key !== '__agg' && key !== '__trend').map((code, idx) => (
                       <label key={code} className="flex items-center mb-2 cursor-pointer select-none text-base font-bold" style={{ color: LINE_COLORS[idx % LINE_COLORS.length] }}>
                         <input
                           type="checkbox"
@@ -497,7 +548,7 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
                         <XAxis dataKey="lesson" tick={{ fontSize: 12, fontWeight: 600, dy: 16 }} angle={0} textAnchor="middle" height={60} interval={0} label={{ value: "Lessons", position: "insideBottom", dy: 25 }} />
                         <YAxis tickFormatter={(val) => `${val}%`} label={{ value: 'Percentage of Utterances (%)', angle: -90, position: 'insideLeft', dy: 80 }} />
                         <Tooltip formatter={(val) => `${val}%`} />
-                        {TEACHING_AREA_CODES.map((code, idx) => (
+                        {chartData.length > 0 && Object.keys(chartData[0]).filter(key => key !== 'lesson' && key !== '__agg' && key !== '__trend').map((code, idx) => (
                           <Line key={code} type="linear" dataKey={code} name={code.split(" ")[0]} stroke={LINE_COLORS[idx % LINE_COLORS.length]} strokeWidth={3} dot={{ r: 6, stroke: LINE_COLORS[idx % LINE_COLORS.length], strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 8 }} />
                         ))}
                         <Line type="linear" dataKey="__trend" name="Trend (SMA)" stroke="#111827" strokeDasharray="5 5" dot={false} isAnimationActive={false} />
@@ -511,7 +562,16 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
         );
 
       case 'wpm_trend':
-        // Use exact same chart implementation as Modal.jsx
+        // Use chartData from state instead of re-parsing
+        if (!chartData || chartData.length === 0) {
+          return (
+            <div className="text-center p-4 text-gray-500 bg-gray-50 rounded-lg">
+              Loading chart data...
+            </div>
+          );
+        }
+        
+        // Add trend data to existing chartData
         const wpmLessonNames = fileSummaries.map((file, idx) => stripXlsx(file.stored_filename || `Lesson #${idx + 1}`));
         const wpmDataWithTrend = chartData.map((row) => {
           const values = wpmLessonNames.map((ln) => Number(row[ln]) || 0);
@@ -568,10 +628,19 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
         );
 
       case 'area_distribution_time':
-        // Use exact same chart implementation as Modal.jsx
+        // Use chartData from state instead of re-parsing
+        if (!chartData || chartData.length === 0) {
+          return (
+            <div className="text-center p-4 text-gray-500 bg-gray-50 rounded-lg">
+              Loading chart data...
+            </div>
+          );
+        }
+        
+        // Add trend data to existing chartData
         const areaDistTrendVals = chartData.map((row) => {
-          const AREA_CODES_ONLY = ["1.1","1.2","3.1","3.2","3.3","3.4","3.5","4.1"];
-          const vals = AREA_CODES_ONLY.map((code) => Number(row[code]) || 0);
+          const effectiveAreaCodesTime = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : ["1.1","1.2","3.1","3.2","3.3","3.4","3.5","4.1"];
+          const vals = effectiveAreaCodesTime.map((code) => Number(row[code]) || 0);
           const avg = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
           return avg;
         });
@@ -627,7 +696,9 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
                         "4.1": "Checking for understanding and providing feedback"
                       };
                       
-                      return Object.keys(teachingAreaLabels).map((areaCode, areaIdx) => (
+                      const effectiveAreaCodesTime = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : Object.keys(teachingAreaLabels);
+                      
+                      return effectiveAreaCodesTime.map((areaCode, areaIdx) => (
                         <Bar key={areaCode} dataKey={areaCode} name={areaCode} fill={LINE_COLORS[areaIdx % LINE_COLORS.length]} radius={[4, 4, 0, 0]} />
                       ));
                     })()}
@@ -658,3 +729,5 @@ export default function GraphRenderer({ graphType, fileIds, messageId }) {
     </div>
   );
 }
+
+export default React.memo(GraphRenderer);
