@@ -288,6 +288,8 @@ export default function Chatbot({ fileIds: initialFileIds }) {
           baseMessage.message_type = "graph";
           baseMessage.graphType = msg.graphType;
           baseMessage.graphReason = msg.graphReason;
+          baseMessage.lessonFilter = msg.lessonFilter || [];
+          baseMessage.areaFilter = msg.areaFilter || [];
         } else {
           baseMessage.message_type = "text";
         }
@@ -347,6 +349,8 @@ export default function Chatbot({ fileIds: initialFileIds }) {
         baseMessage.message_type = "graph";
         baseMessage.graphType = msg.graphType;
         baseMessage.graphReason = msg.graphReason;
+        baseMessage.lessonFilter = msg.lessonFilter || [];
+        baseMessage.areaFilter = msg.areaFilter || [];
       } else {
         baseMessage.message_type = "text";
       }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactMarkdown from "react-markdown";
 import { Download, X } from "lucide-react";
 import GraphRenderer from "./GraphRenderer";
@@ -173,6 +173,10 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
   const [chartImages, setChartImages] = useState({});
   const [capturingCharts, setCapturingCharts] = useState(false);
   const chatContentRef = useRef();
+
+  // Memoized empty arrays for filter fallbacks (matching live chat behavior)
+  const emptyLessonFilter = useMemo(() => [], []);
+  const emptyAreaFilter = useMemo(() => [], []);
 
   // Initialize all messages as selected when modal opens
   useEffect(() => {
@@ -764,7 +768,7 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
               data-message-id={index}
               className={`flex items-start gap-3 ${
                 msg.role === "user" ? "justify-end" : "justify-start"
-              }`}
+              } ${msg.message_type === "graph" ? "justify-center" : ""}`}
             >
               {/* Radio Button for Selection */}
               <div className="flex-shrink-0 mt-2">
@@ -778,10 +782,12 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
               
               {/* Message Content */}
               <div
-                className={`rounded-2xl shadow px-4 py-2 max-w-[70%] ${
+                className={`rounded-2xl shadow px-4 py-2 ${
                   msg.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-800"
+                    ? "bg-blue-600 text-white max-w-[70%]"
+                    : msg.message_type === "graph"
+                    ? "bg-gray-100 text-gray-800 w-[1400px]"
+                    : "bg-gray-100 text-gray-800 max-w-[70%]"
                 }`}
               >
                 <div>
@@ -797,8 +803,8 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
                           graphType={msg.graphType} 
                           fileIds={chatSession.file_ids || []}
                           messageId={msg.id}
-                          lessonFilter={msg.lessonFilter || []}
-                          areaFilter={msg.areaFilter || []}
+                          lessonFilter={msg.lessonFilter || emptyLessonFilter}
+                          areaFilter={msg.areaFilter || emptyAreaFilter}
                         />
                       </div>
                     </div>

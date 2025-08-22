@@ -64,6 +64,15 @@ function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaF
   const [error, setError] = useState(null);
   const [fileSummaries, setFileSummaries] = useState([]);
   
+  // Debug logging for filter validation (helpful for troubleshooting chat history)
+  useEffect(() => {
+    console.log(`DEBUG: GraphRenderer initialized - Type: ${graphType}, MessageId: ${messageId}`);
+    console.log(`DEBUG: Filter validation - Lesson: ${Array.isArray(lessonFilter)} (${lessonFilter?.length || 0} items), Area: ${Array.isArray(areaFilter)} (${areaFilter?.length || 0} items)`);
+    if (!Array.isArray(lessonFilter) || !Array.isArray(areaFilter)) {
+      console.warn(`WARNING: GraphRenderer received invalid filter props - lessonFilter: ${typeof lessonFilter}, areaFilter: ${typeof areaFilter}`);
+    }
+  }, [graphType, messageId, lessonFilter, areaFilter]);
+  
   // Refs for each chart type
   const teachingAreaDistRef = useRef();
   const totalDistRef = useRef();
@@ -74,9 +83,22 @@ function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaF
   // Ref to prevent duplicate calls
   const isFetchingRef = useRef(false);
   
-  // Memoize filter arrays to prevent unnecessary re-renders
-  const memoizedLessonFilter = useMemo(() => lessonFilter, [lessonFilter]);
-  const memoizedAreaFilter = useMemo(() => areaFilter, [areaFilter]);
+  // Memoize and validate filter arrays to prevent unnecessary re-renders
+  const memoizedLessonFilter = useMemo(() => {
+    const validFilter = Array.isArray(lessonFilter) ? lessonFilter : [];
+    if (validFilter.length > 0) {
+      console.log(`DEBUG: GraphRenderer ${graphType} - Lesson filter applied:`, validFilter);
+    }
+    return validFilter;
+  }, [lessonFilter, graphType]);
+  
+  const memoizedAreaFilter = useMemo(() => {
+    const validFilter = Array.isArray(areaFilter) ? areaFilter : [];
+    if (validFilter.length > 0) {
+      console.log(`DEBUG: GraphRenderer ${graphType} - Area filter applied:`, validFilter);
+    }
+    return validFilter;
+  }, [areaFilter, graphType]);
 
   useEffect(() => {
     if (graphType && fileIds && !isFetchingRef.current) {
