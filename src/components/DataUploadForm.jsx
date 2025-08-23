@@ -3,9 +3,9 @@ import React from "react";
 
 export default function DataUploadForm() {
   const handleOpenForm = () => {
-    // Replace the URL below with your actual Microsoft Form link
+    //Data upload link
     window.open(
-      "https://forms.office.com/Pages/ResponsePage.aspx?id=-L9HmjLSsECvLSLOcYpTQ_FO7dvl3t5Dh6ZlDTT8PtRUNkUyVUlIUElPUDFTUkVMS0g0MldaRk5ROCQlQCN0PWcu",
+      "https://forms.gle/xqVt2t6tLzj1L2p6A",
       "_blank"
     );
   };

@@ -1,4 +1,4 @@
-import { Bot, Check } from "lucide-react";
+import { Folder, Bot, Check } from "lucide-react";
 
 export default function ClassFileTable({
   filterClass,
@@ -10,8 +10,32 @@ export default function ClassFileTable({
   handleFileSelection,
   handleGoToChatbot,
 }) {
+  const handleSelectAll = (e) => {
+    const allIds = filteredTableData.flatMap(
+      (item) => item.files?.map((file) => file.file_id) || []
+    );
+    setSelectedFiles(e.target.checked ? allIds : []);
+  };
+
+  const handleClassSelectAll = (item, e) => {
+    const fileIds = item.files?.map((file) => file.file_id) || [];
+    setSelectedFiles((prev) =>
+      e.target.checked
+        ? [...prev, ...fileIds]
+        : prev.filter((id) => !fileIds.includes(id))
+    );
+  };
+
   return (
     <section className="bg-white/95 rounded-2xl shadow-lg border border-blue-100 p-2 md:p-6">
+      {/* Header: Your uploaded class lessons with an icon */}
+      <div className="flex items-center gap-2 mb-6">
+        <Folder className="text-blue-600 w-8 h-8" /> {/* Folder icon */}
+        <h3 className="text-xl font-bold text-gray-800">
+          Your uploaded class lessons
+        </h3>
+      </div>
+
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-4">
         <input
           type="text"
@@ -44,13 +68,7 @@ export default function ClassFileTable({
                   <th className="p-2">
                     <input
                       type="checkbox"
-                      onChange={(e) => {
-                        const allIds = filteredTableData.flatMap(
-                          (item) =>
-                            item.files?.map((file) => file.file_id) || []
-                        );
-                        setSelectedFiles(e.target.checked ? allIds : []);
-                      }}
+                      onChange={handleSelectAll}
                       checked={
                         selectedFiles.length > 0 &&
                         selectedFiles.length ===
@@ -58,6 +76,7 @@ export default function ClassFileTable({
                             item.files?.map((file) => file.file_id)
                           ).length
                       }
+                      aria-label="Select all files"
                     />
                   </th>
                   <th className="text-left p-2">Class</th>
@@ -84,15 +103,8 @@ export default function ClassFileTable({
                           checked={item.files?.every((file) =>
                             selectedFiles.includes(file.file_id)
                           )}
-                          onChange={(e) => {
-                            const fileIds =
-                              item.files?.map((file) => file.file_id) || [];
-                            setSelectedFiles((prev) =>
-                              e.target.checked
-                                ? [...prev, ...fileIds]
-                                : prev.filter((id) => !fileIds.includes(id))
-                            );
-                          }}
+                          onChange={(e) => handleClassSelectAll(item, e)}
+                          aria-label={`Select all files for ${item.class_name}`}
                         />
                       </td>
                       <td className="p-2 font-medium">{item.class_name}</td>
@@ -112,6 +124,7 @@ export default function ClassFileTable({
                                     e.target.checked
                                   )
                                 }
+                                aria-label={`Select file ${file.stored_filename}`}
                               />
                               {file.stored_filename}
                             </label>
@@ -126,6 +139,7 @@ export default function ClassFileTable({
                             if (fileIds.length > 0) setSelectedFiles(fileIds);
                           }}
                           className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-600 hover:text-white shadow transition"
+                          aria-label={`Select all files for ${item.class_name}`}
                         >
                           <Check className="w-3 h-3 inline mr-1" />
                           Select All
@@ -157,6 +171,7 @@ export default function ClassFileTable({
                           if (fileIds.length > 0) setSelectedFiles(fileIds);
                         }}
                         className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-600 hover:text-white transition"
+                        aria-label={`Select all files for ${item.class_name}`}
                       >
                         <Check className="w-3 h-3 inline mr-1" />
                         Select All
@@ -177,6 +192,7 @@ export default function ClassFileTable({
                                 e.target.checked
                               )
                             }
+                            aria-label={`Select file ${file.stored_filename}`}
                           />
                           {file.stored_filename}
                         </label>

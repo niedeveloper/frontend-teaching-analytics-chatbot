@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "../context/UserContext";
 import { getAuth, signOut } from "firebase/auth";
@@ -36,6 +36,9 @@ export default function Dashboard() {
   const [selectedChatSession, setSelectedChatSession] = useState(null);
   const [showChatHistoryModal, setShowChatHistoryModal] = useState(false);
   const [fileNamesMap, setFileNamesMap] = useState({});
+
+  // Ref for ClassFileTable to scroll to
+  const classFileTableRef = useRef(null);
 
   // Data fetching
   useEffect(() => {
@@ -87,7 +90,6 @@ export default function Dashboard() {
 
   const fetchFileNamesForSessions = async (sessions) => {
     try {
-      // Collect all unique file IDs from all sessions
       const allFileIds = [...new Set(sessions.flatMap(session => session.file_ids || []))];
       
       if (allFileIds.length === 0) {
@@ -97,7 +99,6 @@ export default function Dashboard() {
       
       console.log("Fetching file names for IDs:", allFileIds);
       
-      // Fetch file names for all unique file IDs
       const { data: files, error } = await supabase
         .from("files")
         .select("file_id, stored_filename")
@@ -110,7 +111,6 @@ export default function Dashboard() {
       
       console.log("Fetched files:", files);
       
-      // Create a map of file_id to filename
       const fileNamesMap = {};
       files.forEach(file => {
         fileNamesMap[file.file_id] = file.stored_filename;
@@ -147,7 +147,6 @@ export default function Dashboard() {
   const fetchChatSessions = async (userId) => {
     setChatHistoryLoading(true);
     try {
-      // Fetch chat sessions directly by user_id
       const { data: sessions, error: sessionsError } = await supabase
         .from("chatbot_sessions")
         .select(`
@@ -159,7 +158,7 @@ export default function Dashboard() {
         `)
         .eq("user_id", userId)
         .order("started_at", { ascending: false })
-        .limit(10); // Show last 10 sessions
+        .limit(10);
       
       if (sessionsError) {
         console.error("Error fetching chat sessions:", sessionsError);
@@ -169,10 +168,7 @@ export default function Dashboard() {
       console.log("User ID:", userId);
       console.log("Fetched chat sessions:", sessions);
       
-      // Set the sessions directly - we don't need to fetch files separately for display
       setChatSessions(sessions || []);
-      
-      // Fetch file names for all sessions
       await fetchFileNamesForSessions(sessions || []);
       
     } catch (err) {
@@ -203,7 +199,6 @@ export default function Dashboard() {
   };
 
   const handleResumeChat = (session) => {
-    // TODO: Implement resume functionality later
     alert("Resume functionality is work in progress. Coming soon!");
   };
 
@@ -222,7 +217,6 @@ export default function Dashboard() {
     );
   if (error) return <div className="text-red-500">{error}</div>;
 
-  // filteredTableData logic for the table component
   const filteredTableData = tableData.filter((item) =>
     item.class_name?.toLowerCase().includes(filterClass.toLowerCase())
   );
@@ -242,56 +236,52 @@ export default function Dashboard() {
     return `${minutes} min`;
   };
 
-
-
   const getFileNames = (fileIds) => {
     if (!fileIds || fileIds.length === 0) return "No files";
-    
-    // Get the actual file names from our map
     const names = fileIds.map(id => fileNamesMap[id]).filter(Boolean);
-    
     if (names.length === 0) {
-      // Fallback to count if names haven't loaded yet
       return fileIds.length === 1 ? `1 file` : `${fileIds.length} files`;
     }
-    
-    // Remove .xlsx extension from all names
     const cleanNames = names.map(name => name.replace(/\.xlsx$/i, ''));
-    
-    // Display file names, showing at least 5 if available
-    if (cleanNames.length === 1) {
-      return cleanNames[0];
-    } else if (cleanNames.length === 2) {
-      return `${cleanNames[0]}, ${cleanNames[1]}`;
-    } else if (cleanNames.length <= 5) {
-      // Show all names if 5 or fewer
-      return cleanNames.join(', ');
-    } else {
-      // Show first 5 names + count of remaining
-      const firstFive = cleanNames.slice(0, 5).join(', ');
-      const remaining = cleanNames.length - 5;
-      return `${firstFive} +${remaining} more`;
-    }
+    if (cleanNames.length === 1) return cleanNames[0];
+    if (cleanNames.length === 2) return `${cleanNames[0]}, ${cleanNames[1]}`;
+    if (cleanNames.length <= 5) return cleanNames.join(', ');
+    const firstFive = cleanNames.slice(0, 5).join(', ');
+    const remaining = cleanNames.length - 5;
+    return `${firstFive} +${remaining} more`;
+  };
+
+  // Function to scroll to the ClassFileTable
+  const handleFileTextClick = () => {
+    // Scroll to the ClassFileTable
+    classFileTableRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-indigo-100">
       <TopNav userData={userData} handleLogout={handleLogout} />
       <div className="max-w-7xl mx-auto px-2 md:px-8 pt-10 space-y-8">
-        <SummaryCards summary={summary} />
+        <SummaryCards 
+          summary={summary} 
+          handleFileTextClick={handleFileTextClick} // Pass the function as prop
+        />
         <DataUploadForm />
         <TrendChart />
-        <ClassFileTable
-          filterClass={filterClass}
-          setFilterClass={setFilterClass}
-          selectedFiles={selectedFiles}
-          setSelectedFiles={setSelectedFiles}
-          filteredTableData={filteredTableData}
-          tableLoading={tableLoading}
-          handleFileSelection={handleFileSelection}
-          handleGoToChatbot={handleGoToChatbot}
-        />
-        
+
+        {/* ClassFileTable is always visible */}
+        <div ref={classFileTableRef}>
+          <ClassFileTable
+            filterClass={filterClass}
+            setFilterClass={setFilterClass}
+            selectedFiles={selectedFiles}
+            setSelectedFiles={setSelectedFiles}
+            filteredTableData={tableData}
+            tableLoading={tableLoading}
+            handleFileSelection={handleFileSelection}
+            handleGoToChatbot={handleGoToChatbot}
+          />
+        </div>
+
         {/* Chat History Section */}
         <div className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center gap-3 mb-6">
@@ -330,9 +320,9 @@ export default function Dashboard() {
                   {chatSessions.map((session) => (
                     <tr key={session.session_id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-4">
-                                                 <div className="text-sm font-medium text-gray-900">
-                           {`Chat Session - ${formatDate(session.started_at)}`}
-                         </div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {`Chat Session - ${formatDate(session.started_at)}`}
+                        </div>
                         <div className="text-xs text-gray-500">
                           {formatDate(session.started_at)} • ID: {session.session_id.slice(0, 8)}...
                         </div>
