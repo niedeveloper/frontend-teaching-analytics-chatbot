@@ -82,18 +82,21 @@ export default function FileUploadModal({ isOpen, onClose }) {
     console.log('File type:', formData.file.type);
 
     try {
-      // Create organized filename for test upload
+      // Create organized filename for test upload using new structure
       const subject = formData.subject || 'Test';
       const lessonNumber = formData.lessonNumber || 1;
       const lessonDate = formData.lessonDate ? new Date(formData.lessonDate) : new Date();
       const dateString = lessonDate.toISOString().split('T')[0];
       const fileExtension = formData.file.name.split('.').pop() || 'mp3';
       
-      const fileName = `${subject}/Lesson${lessonNumber}_${dateString}.${fileExtension}`;
-      console.log('Attempting to upload:', fileName);
+      // Generate short UUID for uniqueness
+      const shortUuid = Math.random().toString(36).substring(2, 10);
+      const fileName = `${dateString}_Lesson${lessonNumber}_${shortUuid}.${fileExtension}`;
+      const filePath = `users/test_user/${subject}/audio/${fileName}`;
+      console.log('Attempting to upload:', filePath);
 
       // Use service key for storage upload (bypasses RLS)
-      const uploadUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/audio-uploads/${fileName}`;
+      const uploadUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/upload/${filePath}`;
       
       const response = await fetch(uploadUrl, {
         method: 'POST',
@@ -174,15 +177,19 @@ export default function FileUploadModal({ isOpen, onClose }) {
       setUploadProgress(15);
       
       // Step 2: Upload file to Supabase Storage
-      // Create organized filename: Subject/LessonX_YYYY-MM-DD.ext
+      // Create organized filename with new user-based structure: users/user_id/subject/YYYY-MM-DD_LessonX_uuid.ext
       const subject = formData.subject;
       const lessonDate = new Date(formData.lessonDate);
       const dateString = lessonDate.toISOString().split('T')[0]; // YYYY-MM-DD format
       const fileExtension = formData.file.name.split('.').pop() || 'mp3';
       
-      const fileName = `${subject}/Lesson${formData.lessonNumber}_${dateString}.${fileExtension}`;
+      // Generate short UUID for uniqueness
+      const shortUuid = Math.random().toString(36).substring(2, 10); // 8 character random string
+      const fileName = `${dateString}_Lesson${formData.lessonNumber}_${shortUuid}.${fileExtension}`;
+      const filePath = `users/${userId}/${subject}/audio/${fileName}`;
       console.log('Step 2: Uploading file to storage');
       console.log('File name:', fileName);
+      console.log('File path:', filePath);
       console.log('File size:', formData.file.size);
       console.log('File type:', formData.file.type);
       console.log('Subject:', subject);
@@ -198,7 +205,7 @@ export default function FileUploadModal({ isOpen, onClose }) {
       setUploadProgress(25);
               
       // Use service key for storage upload (bypasses RLS)
-      const uploadUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/audio-uploads/${fileName}`;
+      const uploadUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/upload/${filePath}`;
               
               const response = await fetch(uploadUrl, {
                 method: 'POST',
@@ -284,7 +291,7 @@ export default function FileUploadModal({ isOpen, onClose }) {
         class_id: classId,
         original_filename: formData.file.name,
         stored_filename: fileName,
-        file_path: fileName,
+        file_path: filePath, // Use the full path including user directory
         school_code: selectedSubject.schoolCode,
         subject_code: selectedSubject.code,
         lesson_number: parseInt(formData.lessonNumber),
@@ -321,7 +328,7 @@ export default function FileUploadModal({ isOpen, onClose }) {
       const { error: functionError } = await supabase.functions.invoke('process-audio', {
         body: {
           file_id: fileRecord.file_id,
-          file_path: fileName
+          file_path: filePath
         }
       });
 

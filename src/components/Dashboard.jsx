@@ -13,6 +13,7 @@ import TrendChart from "./TrendChart.jsx";
 import ClassFileTable from "./ClassFileTable.jsx";
 import DataUploadForm from "./DataUploadForm.jsx";
 import ChatHistoryModal from "./ChatHistoryModal.jsx";
+import StorageFilesModal from "./StorageFilesModal.jsx";
 
 export default function Dashboard() {
   const { user, setUser } = useUser();
@@ -36,6 +37,7 @@ export default function Dashboard() {
   const [selectedChatSession, setSelectedChatSession] = useState(null);
   const [showChatHistoryModal, setShowChatHistoryModal] = useState(false);
   const [fileNamesMap, setFileNamesMap] = useState({});
+  const [showStorageFilesModal, setShowStorageFilesModal] = useState(false);
 
   // Ref for ClassFileTable to scroll to
   const classFileTableRef = useRef(null);
@@ -257,6 +259,11 @@ export default function Dashboard() {
     classFileTableRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Function to open storage files modal
+  const handleLessonsClick = () => {
+    setShowStorageFilesModal(true);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-indigo-100">
       <TopNav userData={userData} handleLogout={handleLogout} />
@@ -264,6 +271,7 @@ export default function Dashboard() {
         <SummaryCards 
           summary={summary} 
           handleFileTextClick={handleFileTextClick} // Pass the function as prop
+          handleLessonsClick={handleLessonsClick} // Pass the new lessons handler
         />
         <DataUploadForm />
         <TrendChart />
@@ -379,6 +387,12 @@ export default function Dashboard() {
         onClose={() => setShowChatHistoryModal(false)}
         chatSession={selectedChatSession}
         fileSummaries={selectedChatSession?.files || []}
+      />
+
+      {/* Storage Files Modal */}
+      <StorageFilesModal
+        open={showStorageFilesModal}
+        onClose={() => setShowStorageFilesModal(false)}
       />
     </div>
   );
