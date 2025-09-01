@@ -136,7 +136,14 @@ function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaF
         throw error;
       }
       
-      setFileSummaries(data || []);
+      // Filter out audio files (.mp3, .mp4, .wav, .m4a) - only include transcript files
+      const filteredFiles = (data || []).filter(file => {
+        const filename = file.stored_filename || '';
+        const isAudioFile = /\.(mp3|mp4|wav|m4a)$/i.test(filename);
+        return !isAudioFile; // Exclude audio files
+      });
+      
+      setFileSummaries(filteredFiles);
       
       if (graphType === 'wpm_trend' || graphType === 'area_distribution_time') {
         // These charts need chunk data
@@ -148,7 +155,7 @@ function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaF
         }
         
         if (graphType === 'wpm_trend') {
-          const wpmData = buildWpmChartData(chunks, data || []);
+          const wpmData = buildWpmChartData(chunks, filteredFiles);
           console.log(`DEBUG: Built wpm_trend data:`, wpmData);
           setChartData(wpmData);
         } else if (graphType === 'area_distribution_time') {
@@ -160,12 +167,12 @@ function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaF
         // These charts work with summary data only - build the data here
         if (graphType === 'teaching_area_distribution') {
           // Build teaching area distribution data from summaries
-          const teachingAreaLessonNames = data.map((file, idx) => stripXlsx(file.stored_filename || `Lesson #${idx + 1}`));
+          const teachingAreaLessonNames = filteredFiles.map((file, idx) => stripXlsx(file.stored_filename || `Lesson #${idx + 1}`));
           const effectiveAreaCodes = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : TEACHING_AREA_CODES.map(code => code.split(" ")[0]);
           
           const groupedBarData = effectiveAreaCodes.map((code) => {
             const entry = { code: code };
-            data.forEach((file, idx) => {
+            filteredFiles.forEach((file, idx) => {
               const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
               entry[teachingAreaLessonNames[idx]] = stats[code]?.percent || 0;
             });
@@ -180,7 +187,7 @@ function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaF
           const effectiveAreaCodes = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : TEACHING_AREA_CODES.map(code => code.split(" ")[0]);
           
           const totalDistData = effectiveAreaCodes.map((code) => {
-            const percents = data.map((file) => {
+            const percents = filteredFiles.map((file) => {
               const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
               return stats[code]?.percent || 0;
             });
@@ -194,7 +201,7 @@ function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaF
         } else if (graphType === 'utterance_timeline') {
           // Build utterance timeline data from summaries
           const effectiveAreaCodes = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : TEACHING_AREA_CODES.map(code => code.split(" ")[0]);
-          const lineChartData = data.map((file, idx) => {
+          const lineChartData = filteredFiles.map((file, idx) => {
             const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
             const entry = { lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`) };
             effectiveAreaCodes.forEach((code) => {

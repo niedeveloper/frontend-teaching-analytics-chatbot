@@ -5,7 +5,9 @@ import { useUser } from "../context/UserContext";
 import { getAuth, signOut } from "firebase/auth";
 import firebaseApp from "../lib/firebase";
 import { supabase } from "../lib/supabaseClient";
-import { MessageSquare, Eye, Download } from "lucide-react";
+import { MessageSquare, Eye, Download, Play, Clock, FileText, Hash, Calendar, ArrowRight } from "lucide-react";
+import * as Tooltip from '@radix-ui/react-tooltip';
+import * as Separator from '@radix-ui/react-separator';
 
 import TopNav from "./TopNav.jsx";
 import SummaryCards from "./SummaryCard.jsx";
@@ -291,94 +293,172 @@ export default function Dashboard() {
         </div>
 
         {/* Chat History Section */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="bg-blue-100 p-2 rounded-lg">
-              <MessageSquare className="w-6 h-6 text-blue-600" />
+        <Tooltip.Provider>
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3 rounded-xl shadow-lg">
+                    <MessageSquare className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-gray-900">Recent Conversations</h3>
+                    <p className="text-gray-600 mt-1">Your teaching analytics chat history and insights</p>
+                  </div>
+                </div>
+                {chatSessions.length > 0 && (
+                  <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                    {chatSessions.length} session{chatSessions.length !== 1 ? 's' : ''}
+                  </div>
+                )}
+              </div>
             </div>
-            <div>
-              <h3 className="text-xl font-bold text-gray-800">Recent Chat Sessions</h3>
-              <p className="text-gray-600">View and download your recent conversations with the teaching analytics chatbot</p>
-            </div>
-          </div>
+            
+            {/* Content */}
+            <div className="p-6">
 
-          {chatHistoryLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-2 text-gray-600">Loading chat sessions...</span>
-            </div>
-          ) : chatSessions.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <MessageSquare className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p>No chat sessions yet. Start a conversation to see your history here.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Conversation</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Files Analyzed</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Duration</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Messages</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+              {/* Loading State */}
+              {chatHistoryLoading ? (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <div className="relative">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-100 border-t-blue-600"></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <MessageSquare className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                  <p className="mt-4 text-gray-600 font-medium">Loading conversations...</p>
+                </div>
+              ) : chatSessions.length === 0 ? (
+                /* Empty State */
+                <div className="text-center py-16">
+                  <div className="bg-gray-50 p-6 rounded-2xl inline-block mb-4">
+                    <MessageSquare className="w-12 h-12 text-gray-300 mx-auto" />
+                  </div>
+                  <h4 className="text-xl font-semibold text-gray-900 mb-2">No conversations yet</h4>
+                  <p className="text-gray-500 mb-4">Start analyzing your teaching data to see conversations here</p>
+                  <button
+                    onClick={() => router.push('/chatbot')}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Start First Conversation
+                  </button>
+                </div>
+              ) : (
+                /* Chat Sessions Grid */
+                <div className="grid gap-4">
                   {chatSessions.map((session) => (
-                    <tr key={session.session_id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {`Chat Session - ${formatDate(session.started_at)}`}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {formatDate(session.started_at)} • ID: {session.session_id.slice(0, 8)}...
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-sm text-gray-900 max-w-xs">
-                          <div className="break-words">
-                            {getFileNames(session.file_ids)}
+                    <div
+                      key={session.session_id}
+                      className="group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-blue-200 transition-all duration-200"
+                    >
+                      {/* Session Header */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-1">
+                            Chat Session
+                          </h4>
+                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-4 h-4" />
+                              <span>{formatDate(session.started_at)}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Hash className="w-4 h-4" />
+                              <span>{session.session_id.slice(0, 8)}...</span>
+                            </div>
                           </div>
                         </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-sm text-gray-600">
-                          {formatDuration(session.started_at, session.ended_at)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-sm text-gray-600">
-                          {session.conversation?.length || 0} messages
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleResumeChat(session)}
-                            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                            </svg>
-                            Resume
-                          </button>
-                          <button
-                            onClick={() => handleViewChat(session)}
-                            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                          >
-                            <Eye size={14} />
-                            View
-                          </button>
+                        <div className="flex items-center gap-2">
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <button
+                                onClick={() => handleResumeChat(session)}
+                                className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-all duration-200 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                              >
+                                <Play className="w-4 h-4" />
+                                Resume
+                              </button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content className="bg-gray-900 text-white px-2 py-1 rounded text-sm">
+                                Continue this conversation
+                                <Tooltip.Arrow className="fill-gray-900" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <button
+                                onClick={() => handleViewChat(session)}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                              >
+                                <Eye className="w-4 h-4" />
+                                View
+                              </button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content className="bg-gray-900 text-white px-2 py-1 rounded text-sm">
+                                View conversation details
+                                <Tooltip.Arrow className="fill-gray-900" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
                         </div>
-                      </td>
-                    </tr>
+                      </div>
+                      
+                      <Separator.Root className="bg-gray-200 h-px w-full mb-4" />
+                      
+                      {/* Session Details */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Files Analyzed */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <FileText className="w-4 h-4" />
+                            Files Analyzed
+                          </div>
+                          <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                            {getFileNames(session.file_ids) || 'No files selected'}
+                          </div>
+                        </div>
+                        
+                        {/* Duration */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <Clock className="w-4 h-4" />
+                            Duration
+                          </div>
+                          <div className="text-sm text-gray-900 font-medium">
+                            {formatDuration(session.started_at, session.ended_at)}
+                          </div>
+                        </div>
+                        
+                        {/* Messages */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <MessageSquare className="w-4 h-4" />
+                            Messages
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-900 font-medium">
+                              {session.conversation?.length || 0} messages
+                            </span>
+                            {(session.conversation?.length || 0) > 0 && (
+                              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        </Tooltip.Provider>
       </div>
 
       {/* Chat History Modal */}

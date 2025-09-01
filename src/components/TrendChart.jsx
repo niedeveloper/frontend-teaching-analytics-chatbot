@@ -147,7 +147,15 @@ export default function TrendChart() {
         setLoading(false);
         return;
       }
-      setFileSummaries(fileRows);
+      
+      // Filter out audio files (.mp3, .mp4, .wav, .m4a) - only include transcript files
+      const filteredFiles = fileRows.filter(file => {
+        const filename = file.stored_filename || '';
+        const isAudioFile = /\.(mp3|mp4|wav|m4a)$/i.test(filename);
+        return !isAudioFile; // Exclude audio files
+      });
+      
+      setFileSummaries(filteredFiles);
       setLoading(false);
     }
     fetchFileSummaries();
