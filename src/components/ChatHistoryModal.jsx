@@ -84,26 +84,26 @@ function InlineSummaryTable({ fileSummaries }) {
       .filter(Boolean);
   }
   
-  // Render a table for each file
-  return (
-    <div className="flex flex-row gap-6 overflow-x-auto pb-2">
-      {fileSummaries.map((file, idx) => {
-        const summary = (file.data_summary || "").replace(/\\n/g, "\n");
-        const stats = parseTeachingAreaStats(summary);
-        const tableData = statsToTable(stats);
-        // Find the row with the highest percent
-        const maxPercent = Math.max(...tableData.map((row) => row.percent));
-        const questionAnalysis = parseSection(summary, "QUESTION ANALYSIS:");
-        const keyInsights = parseSection(summary, "KEY INSIGHTS:");
-        return (
-          <div
-            key={file.file_id || idx}
-            className="min-w-[400px] max-w-[450px] flex-shrink-0 overflow-x-auto mb-6 bg-white rounded-lg shadow p-3"
-          >
+     // Render a table for each file
+   return (
+     <div className="flex flex-col gap-4 pb-2">
+       {fileSummaries.map((file, idx) => {
+         const summary = (file.data_summary || "").replace(/\\n/g, "\n");
+         const stats = parseTeachingAreaStats(summary);
+         const tableData = statsToTable(stats);
+         // Find the row with the highest percent
+         const maxPercent = Math.max(...tableData.map((row) => row.percent));
+         const questionAnalysis = parseSection(summary, "QUESTION ANALYSIS:");
+         const keyInsights = parseSection(summary, "KEY INSIGHTS:");
+         return (
+           <div
+             key={file.file_id || idx}
+             className="w-full bg-white rounded-lg shadow p-3"
+           >
             <div className="font-semibold mb-1 text-blue-700">
               {file.stored_filename || `File #${idx + 1}`}
             </div>
-            <table className="min-w-[350px] border text-xs bg-white rounded shadow mb-3">
+                         <table className="w-full border text-xs bg-white rounded shadow mb-3">
               <thead>
                 <tr>
                   <th className="border px-2 py-1">Teaching Area</th>
@@ -348,6 +348,9 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
               box-shadow: 0 2px 8px rgba(0,0,0,0.1);
               position: relative;
               font-size: 13px;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+              box-sizing: border-box;
             }
             
             .bubble.user {
@@ -543,6 +546,31 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
               margin: 5px 0;
             }
             
+            /* Summary table container styling */
+            .summary-tables-container {
+              max-width: 100%;
+              overflow: hidden;
+            }
+            
+            .summary-tables-container > div {
+              max-width: 100% !important;
+              width: 100% !important;
+              box-sizing: border-box;
+            }
+            
+            .summary-tables-container table {
+              max-width: 100% !important;
+              width: 100% !important;
+              table-layout: fixed;
+              box-sizing: border-box;
+            }
+            
+            .summary-tables-container td {
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+              hyphens: auto;
+            }
+            
             @media print {
               .bubble {
                 box-shadow: none;
@@ -584,17 +612,152 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
             
             let content = '';
             if (msg.message_type === "summary_table") {
-              content = `
-                <div class="special-content">
-                  <div class="icon">📊</div>
-                  <div class="title">Summary Table</div>
-                  <div class="description">Teaching Area Statistics and Analysis</div>
-                  <div style="margin-top: 15px; text-align: left; font-size: 14px; color: #374151;">
-                    <strong>Note:</strong> This message contains a detailed summary table with teaching area statistics. 
-                    The full table data is available in the original chat session.
+              // Generate HTML for summary tables
+              const fileSummaries = msg.fileSummaries || [];
+              let summaryTableHTML = '';
+              
+              if (fileSummaries.length > 0) {
+                                 summaryTableHTML = `
+                   <div class="summary-tables-container" style="display: flex; flex-direction: column; gap: 20px; margin: 15px 0;">
+                    ${fileSummaries.map((file, idx) => {
+                      const summary = (file.data_summary || "").replace(/\\n/g, "\n");
+                      
+                      // Parse teaching area statistics
+                      const lines = summary.split("\n");
+                      const stats = {};
+                      let inStats = false;
+                      for (const line of lines) {
+                        if (line.startsWith("TEACHING AREA STATISTICS:")) {
+                          inStats = true;
+                          continue;
+                        }
+                        if (inStats) {
+                          if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) break;
+                          const match = line.match(
+                            /^([^.]+\.\d [^:]+): (\d+) utterances \(([^)]+)%\)(?: - (\d+) questions)?/
+                          );
+                          if (match) {
+                            stats[match[1].trim()] = {
+                              value: parseInt(match[2], 10),
+                              percent: parseFloat(match[3]),
+                              questions: match[4] ? parseInt(match[4], 10) : undefined,
+                            };
+                          }
+                        }
+                      }
+                      
+                      // Parse question analysis and key insights
+                      const questionAnalysis = [];
+                      const keyInsights = [];
+                      let inQuestionAnalysis = false;
+                      let inKeyInsights = false;
+                      
+                      for (const line of lines) {
+                        if (line.startsWith("QUESTION ANALYSIS:")) {
+                          inQuestionAnalysis = true;
+                          inKeyInsights = false;
+                          continue;
+                        }
+                        if (line.startsWith("KEY INSIGHTS:")) {
+                          inQuestionAnalysis = false;
+                          inKeyInsights = true;
+                          continue;
+                        }
+                        if (inQuestionAnalysis || inKeyInsights) {
+                          if (line.trim() === "" || line.match(/^([A-Z ]+):/)) break;
+                          const match = line.match(/^-\s*([^:]+):\s*(.+)$/);
+                          if (match) {
+                            const item = { key: match[1].trim(), value: match[2].trim() };
+                            if (inQuestionAnalysis) questionAnalysis.push(item);
+                            if (inKeyInsights) keyInsights.push(item);
+                          }
+                        }
+                      }
+                      
+                      // Generate table data
+                      const TEACHING_AREA_CODES = [
+                        "1.1 Establishing Interaction and rapport",
+                        "1.2 Setting and Maintaining Rules and Routine",
+                        "3.1 Activating prior knowledge",
+                        "3.2 Motivating learners for learning engagement",
+                        "3.3 Using Questions to deepen learning",
+                        "3.4 Facilitating collaborative learning",
+                        "3.5 Concluding the lesson",
+                        "4.1 Checking for understanding and providing feedback",
+                      ];
+                      
+                      const tableData = TEACHING_AREA_CODES.map((code) => ({
+                        name: code,
+                        value: stats[code]?.value || 0,
+                        percent: stats[code]?.percent || 0,
+                        questions: stats[code]?.questions || 0,
+                      }));
+                      
+                      const maxPercent = Math.max(...tableData.map((row) => row.percent));
+                      
+                                             return `
+                         <div style="width: 100%; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding: 15px; margin-bottom: 20px;">
+                          <div style="font-weight: 600; margin-bottom: 5px; color: #1d4ed8; font-size: 14px;">
+                            ${file.stored_filename || `File #${idx + 1}`}
+                          </div>
+                                                     <table style="width: 100%; border-collapse: collapse; font-size: 11px; background: white; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 12px;">
+                            <thead>
+                              <tr>
+                                <th style="border: 1px solid #d1d5db; padding: 4px 8px; background: #f9fafb; font-weight: 600;">Teaching Area</th>
+                                <th style="border: 1px solid #d1d5db; padding: 4px 8px; background: #f9fafb; font-weight: 600;">Utterances</th>
+                                <th style="border: 1px solid #d1d5db; padding: 4px 8px; background: #f9fafb; font-weight: 600;">% of Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              ${tableData.map((row) => `
+                                <tr style="${row.percent === maxPercent ? 'background-color: #fef3c7;' : ''}">
+                                  <td style="border: 1px solid #d1d5db; padding: 4px 8px; text-align: left; font-size: 10px;">${row.name}</td>
+                                  <td style="border: 1px solid #d1d5db; padding: 4px 8px; text-align: center;">${row.value}</td>
+                                  <td style="border: 1px solid #d1d5db; padding: 4px 8px; text-align: center;">${row.percent}%</td>
+                                </tr>
+                              `).join('')}
+                            </tbody>
+                          </table>
+                          ${questionAnalysis.length > 0 ? `
+                            <div style="margin-bottom: 8px;">
+                              <div style="font-weight: 600; color: #1d4ed8; margin-bottom: 4px; font-size: 12px;">Question Analysis</div>
+                              <ul style="list-style-type: disc; padding-left: 20px; font-size: 10px;">
+                                ${questionAnalysis.map((item, i) => `
+                                  <li style="margin: 2px 0;">
+                                    <span style="font-weight: 500;">${item.key}:</span> ${item.value}
+                                  </li>
+                                `).join('')}
+                              </ul>
+                            </div>
+                          ` : ''}
+                          ${keyInsights.length > 0 ? `
+                            <div>
+                              <div style="font-weight: 600; color: #1d4ed8; margin-bottom: 4px; font-size: 12px;">Key Insights</div>
+                              <ul style="list-style-type: disc; padding-left: 20px; font-size: 10px;">
+                                ${keyInsights.map((item, i) => `
+                                  <li style="margin: 2px 0;">
+                                    <span style="font-weight: 500;">${item.key}:</span> ${item.value}
+                                  </li>
+                                `).join('')}
+                              </ul>
+                            </div>
+                          ` : ''}
+                        </div>
+                      `;
+                    }).join('')}
                   </div>
-                </div>
-              `;
+                `;
+              } else {
+                summaryTableHTML = `
+                  <div class="special-content">
+                    <div class="icon">📊</div>
+                    <div class="title">Summary Table</div>
+                    <div class="description">No summary data available</div>
+                  </div>
+                `;
+              }
+              
+              content = summaryTableHTML;
             } else if (msg.message_type === "graph") {
               // Display the captured chart image if available
               const chartImage = chartImages[chatSession.conversation.indexOf(msg)];
