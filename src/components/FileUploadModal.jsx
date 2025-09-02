@@ -318,30 +318,45 @@ export default function FileUploadModal({ isOpen, onClose }) {
 
       setUploadProgress(85);
 
-      // Step 4: Trigger Edge Function for processing
-      console.log('Step 4: Triggering Edge Function');
+      // Step 4: Create task for processing
+      console.log('Step 4: Creating processing task');
       console.log('File ID:', fileRecord.file_id);
-      console.log('File path:', fileName);
+      console.log('File path:', filePath);
       setUploadProgress(90);
       
-      // Trigger Edge Function (JWT verification disabled)
-      const { error: functionError } = await supabase.functions.invoke('process-audio', {
-        body: {
-          file_id: fileRecord.file_id,
-          file_path: filePath
+      // Create task record for background processing
+      const taskData = {
+        file_id: fileRecord.file_id,
+        task_type: 'audio_processing',
+        status: 'pending',
+        metadata: {
+          file_path: filePath,
+          original_filename: formData.file.name,
+          subject: formData.subject,
+          lesson_number: parseInt(formData.lessonNumber),
+          lesson_date: formData.lessonDate
         }
-      });
+      };
+      
+      console.log('Creating task with data:', taskData);
+      
+      const { data: taskRecord, error: taskError } = await supabase
+        .from('tasks')
+        .insert(taskData)
+        .select()
+        .single();
 
-      console.log('Edge Function result:', functionError);
+      console.log('Task creation result:', taskRecord);
+      console.log('Task creation error:', taskError);
 
-      if (functionError) {
-        console.warn('Edge Function trigger failed, but file is uploaded:', functionError);
-        setErrorMessage('File uploaded successfully, but processing may be delayed. Please check the status later.');
+      if (taskError) {
+        console.warn('Task creation failed, but file is uploaded:', taskError);
+        setErrorMessage('File uploaded successfully, but task creation failed. Processing may be delayed.');
         setShowErrorToast(true);
         return;
       }
 
-      console.log('Edge Function triggered successfully');
+      console.log('Task created successfully:', taskRecord.task_id);
       setUploadProgress(100);
       
       // Success

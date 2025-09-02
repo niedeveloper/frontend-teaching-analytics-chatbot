@@ -5,7 +5,7 @@ import { useUser } from "../context/UserContext";
 import { getAuth, signOut } from "firebase/auth";
 import firebaseApp from "../lib/firebase";
 import { supabase } from "../lib/supabaseClient";
-import { MessageSquare, Eye, Download, Play, Clock, FileText, Hash, Calendar, ArrowRight } from "lucide-react";
+import { MessageSquare, Eye, Download, Play, Clock, FileText, Hash, Calendar, ArrowRight, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import * as Tooltip from '@radix-ui/react-tooltip';
 import * as Separator from '@radix-ui/react-separator';
 
@@ -40,6 +40,10 @@ export default function Dashboard() {
   const [showChatHistoryModal, setShowChatHistoryModal] = useState(false);
   const [fileNamesMap, setFileNamesMap] = useState({});
   const [showStorageFilesModal, setShowStorageFilesModal] = useState(false);
+  
+  // Task status state
+  const [tasks, setTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
 
   // Ref for ClassFileTable to scroll to
   const classFileTableRef = useRef(null);
@@ -82,6 +86,7 @@ export default function Dashboard() {
         console.log("User ID for chat sessions:", userId);
         await fetchTableData(userId);
         await fetchChatSessions(userId);
+        await fetchTasks(userId);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -183,6 +188,51 @@ export default function Dashboard() {
     }
   };
 
+  const fetchTasks = async (userId) => {
+    setTasksLoading(true);
+    try {
+      const { data: tasksData, error: tasksError } = await supabase
+        .from("tasks")
+        .select(`
+          task_id,
+          file_id,
+          task_type,
+          status,
+          created_at,
+          updated_at,
+          started_at,
+          completed_at,
+          error_message,
+          retry_count,
+          metadata,
+          files!inner(
+            stored_filename,
+            classes!inner(
+              user_id,
+              class_name
+            )
+          )
+        `)
+        .eq("files.classes.user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      
+      if (tasksError) {
+        console.error("Error fetching tasks:", tasksError);
+        throw tasksError;
+      }
+      
+      console.log("Fetched tasks:", tasksData);
+      setTasks(tasksData || []);
+      
+    } catch (err) {
+      console.error("Failed to fetch tasks:", err);
+      setTasks([]);
+    } finally {
+      setTasksLoading(false);
+    }
+  };
+
   const handleFileSelection = (fileId, isChecked) => {
     setSelectedFiles((prev) =>
       isChecked ? [...prev, fileId] : prev.filter((id) => id !== fileId)
@@ -253,6 +303,41 @@ export default function Dashboard() {
     const firstFive = cleanNames.slice(0, 5).join(', ');
     const remaining = cleanNames.length - 5;
     return `${firstFive} +${remaining} more`;
+  };
+
+  const getTaskStatusInfo = (status) => {
+    switch (status) {
+      case 'pending':
+        return { 
+          icon: Clock, 
+          color: 'text-yellow-600 bg-yellow-50 border-yellow-200',
+          label: 'Pending'
+        };
+      case 'processing':
+        return { 
+          icon: Loader2, 
+          color: 'text-blue-600 bg-blue-50 border-blue-200',
+          label: 'Processing'
+        };
+      case 'completed':
+        return { 
+          icon: CheckCircle, 
+          color: 'text-green-600 bg-green-50 border-green-200',
+          label: 'Completed'
+        };
+      case 'failed':
+        return { 
+          icon: XCircle, 
+          color: 'text-red-600 bg-red-50 border-red-200',
+          label: 'Failed'
+        };
+      default:
+        return { 
+          icon: AlertCircle, 
+          color: 'text-gray-600 bg-gray-50 border-gray-200',
+          label: 'Unknown'
+        };
+    }
   };
 
   // Function to scroll to the ClassFileTable
@@ -454,6 +539,150 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </Tooltip.Provider>
+
+        {/* Task Status Section */}
+        <Tooltip.Provider>
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-3 rounded-xl shadow-lg">
+                    <Loader2 className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-gray-900">Processing Tasks</h3>
+                    <p className="text-gray-600 mt-1">Monitor your file processing status</p>
+                  </div>
+                </div>
+                {tasks.length > 0 && (
+                  <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                    {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="p-6">
+              {/* Loading State */}
+              {tasksLoading ? (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <div className="relative">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-100 border-t-green-600"></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 text-green-600" />
+                    </div>
+                  </div>
+                  <p className="mt-4 text-gray-600 font-medium">Loading tasks...</p>
+                </div>
+              ) : tasks.length === 0 ? (
+                /* Empty State */
+                <div className="text-center py-16">
+                  <div className="bg-gray-50 p-6 rounded-2xl inline-block mb-4">
+                    <CheckCircle className="w-12 h-12 text-gray-300 mx-auto" />
+                  </div>
+                  <h4 className="text-xl font-semibold text-gray-900 mb-2">No processing tasks</h4>
+                  <p className="text-gray-500 mb-4">Upload some audio files to see processing tasks here</p>
+                </div>
+              ) : (
+                /* Tasks Grid */
+                <div className="grid gap-4">
+                  {tasks.map((task) => {
+                    const statusInfo = getTaskStatusInfo(task.status);
+                    const StatusIcon = statusInfo.icon;
+                    
+                    return (
+                      <div
+                        key={task.task_id}
+                        className="group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-green-200 transition-all duration-200"
+                      >
+                        {/* Task Header */}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <h4 className="text-lg font-semibold text-gray-900 mb-1">
+                              {task.files?.stored_filename || 'Unknown File'}
+                            </h4>
+                            <div className="flex items-center gap-4 text-sm text-gray-500">
+                              <div className="flex items-center gap-1">
+                                <Calendar className="w-4 h-4" />
+                                <span>{formatDate(task.created_at)}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Hash className="w-4 h-4" />
+                                <span>{task.task_id.slice(0, 8)}...</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className={`flex items-center gap-2 px-3 py-1 rounded-lg border ${statusInfo.color}`}>
+                            <StatusIcon className={`w-4 h-4 ${task.status === 'processing' ? 'animate-spin' : ''}`} />
+                            <span className="text-sm font-medium">{statusInfo.label}</span>
+                          </div>
+                        </div>
+                        
+                        <Separator.Root className="bg-gray-200 h-px w-full mb-4" />
+                        
+                        {/* Task Details */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Subject */}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                              <FileText className="w-4 h-4" />
+                              Subject
+                            </div>
+                            <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                              {task.files?.classes?.class_name || task.metadata?.subject || 'Unknown'}
+                            </div>
+                          </div>
+                          
+                          {/* Task Type */}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                              <Loader2 className="w-4 h-4" />
+                              Task Type
+                            </div>
+                            <div className="text-sm text-gray-900 font-medium">
+                              {task.task_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            </div>
+                          </div>
+                          
+                          {/* Retry Count */}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                              <AlertCircle className="w-4 h-4" />
+                              Attempts
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-900 font-medium">
+                                {task.retry_count + 1}
+                              </span>
+                              {task.retry_count > 0 && (
+                                <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium">
+                                  Retried
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Error Message */}
+                        {task.error_message && (
+                          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <div className="flex items-center gap-2 text-sm font-medium text-red-800 mb-1">
+                              <XCircle className="w-4 h-4" />
+                              Error Details
+                            </div>
+                            <p className="text-sm text-red-700">{task.error_message}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
