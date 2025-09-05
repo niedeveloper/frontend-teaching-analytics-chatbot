@@ -129,7 +129,7 @@ function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaF
       // Fetch file summaries to get file names and other metadata
       const { data, error } = await supabase
         .from("files")
-        .select("file_id, stored_filename, data_summary")
+        .select("file_id, stored_filename, data_summary, lesson_date, lesson_number")
         .in("file_id", effectiveFileIds);
       
       if (error) {
@@ -142,8 +142,20 @@ function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaF
         const isAudioFile = /\.(mp3|mp4|wav|m4a)$/i.test(filename);
         return !isAudioFile; // Exclude audio files
       });
+
+      // Sort files by lesson_date and lesson_number for consistent ordering
+      const sortedFiles = filteredFiles.sort((a, b) => {
+        // First sort by lesson_date
+        const dateA = new Date(a.lesson_date || 0);
+        const dateB = new Date(b.lesson_date || 0);
+        if (dateA.getTime() !== dateB.getTime()) {
+          return dateA.getTime() - dateB.getTime();
+        }
+        // Then by lesson_number
+        return (a.lesson_number || 0) - (b.lesson_number || 0);
+      });
       
-      setFileSummaries(filteredFiles);
+      setFileSummaries(sortedFiles);
       
       if (graphType === 'wpm_trend' || graphType === 'area_distribution_time') {
         // These charts need chunk data

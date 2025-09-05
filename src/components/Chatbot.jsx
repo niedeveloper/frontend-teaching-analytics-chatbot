@@ -408,12 +408,23 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       setLoading(true);
       const { data, error } = await supabase
         .from("files")
-        .select("file_id, stored_filename")
+        .select("file_id, stored_filename, lesson_date, lesson_number")
         .in("file_id", fileIds);
       if (error) {
         setFileNames(emptyArray);
       } else {
-        setFileNames(data.map((f) => f.stored_filename));
+        // Sort files by lesson_date and lesson_number for consistent ordering
+        const sortedData = (data || []).sort((a, b) => {
+          // First sort by lesson_date
+          const dateA = new Date(a.lesson_date || 0);
+          const dateB = new Date(b.lesson_date || 0);
+          if (dateA.getTime() !== dateB.getTime()) {
+            return dateA.getTime() - dateB.getTime();
+          }
+          // Then by lesson_number
+          return (a.lesson_number || 0) - (b.lesson_number || 0);
+        });
+        setFileNames(sortedData.map((f) => f.stored_filename));
       }
       setLoading(false);
     }

@@ -63,14 +63,17 @@ export default function Dashboard() {
         if (userError) throw new Error("Failed to fetch user data");
         setUserData(userData);
         const userId = userData.user_id;
-        const { data: classesData } = await supabase
-          .from("classes")
+        // Count classes through files (since classes table has no user_id)
+        const { data: userFilesForCount } = await supabase
+          .from("files")
           .select("class_id")
           .eq("user_id", userId);
+        const uniqueClassIds = [...new Set(userFilesForCount?.map(f => f.class_id) || [])];
+        const classesData = uniqueClassIds.map(id => ({ class_id: id }));
         const { data: lecturesData } = await supabase
           .from("files")
-          .select("file_id, classes!inner(user_id)")
-          .eq("classes.user_id", userId);
+          .select("file_id")
+          .eq("user_id", userId);
         const { count: chatSessionsCount, error: chatSessionsError } =
           await supabase
             .from("chatbot_sessions")
@@ -134,20 +137,30 @@ export default function Dashboard() {
   const fetchTableData = async (userId) => {
     setTableLoading(true);
     try {
-      const { data } = await supabase
+      // Get user's files directly (since classes table has no user_id)
+      const { data: filesData } = await supabase
+        .from("files")
+        .select("file_id, stored_filename, class_id")
+        .eq("user_id", userId)
+        .order("lesson_date", { ascending: true })
+        .order("lesson_number", { ascending: true });
+
+      // Get unique class_ids from user's files
+      const uniqueClassIds = [...new Set(filesData?.map(f => f.class_id) || [])];
+      
+      // Get class names for those class_ids
+      const { data: classesData } = await supabase
         .from("classes")
-        .select(
-          `
-          class_id,
-          class_name,
-          files (
-            file_id,
-            stored_filename
-          )
-        `
-        )
-        .eq("user_id", userId);
-      setTableData(data || []);
+        .select("class_id, class_name")
+        .in("class_id", uniqueClassIds);
+
+      // Group files by class_id for compatibility with existing UI
+      const classesWithFiles = (classesData || []).map(classItem => ({
+        ...classItem,
+        files: (filesData || []).filter(file => file.class_id === classItem.class_id)
+      }));
+
+      setTableData(classesWithFiles);
     } finally {
       setTableLoading(false);
     }
@@ -207,13 +220,11 @@ export default function Dashboard() {
           metadata,
           files!inner(
             stored_filename,
-            classes!inner(
-              user_id,
-              class_name
-            )
+            user_id,
+            class_id
           )
         `)
-        .eq("files.classes.user_id", userId)
+        .eq("files.user_id", userId)
         .order("created_at", { ascending: false })
         .limit(20);
       

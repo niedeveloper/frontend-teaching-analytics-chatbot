@@ -126,21 +126,10 @@ export default function TrendChart() {
       }
       const userId = userRows.user_id;
 
-      const { data: classRows, error: classError } = await supabase
-        .from("classes")
-        .select("class_id")
-        .eq("user_id", userId);
-      if (classError || !classRows || classRows.length === 0) {
-        setFileSummaries([]);
-        setLoading(false);
-        return;
-      }
-      const classIds = classRows.map((c) => c.class_id);
-
       const { data: fileRows, error: fileError } = await supabase
         .from("files")
         .select("file_id, stored_filename, data_summary")
-        .in("class_id", classIds)
+        .eq("user_id", userId)
         .order("lesson_date", { ascending: true });
       if (fileError || !fileRows) {
         setFileSummaries([]);

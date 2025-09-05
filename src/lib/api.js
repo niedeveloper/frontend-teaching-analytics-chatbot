@@ -33,10 +33,23 @@ export async function fetchLessonSummaries(fileIds) {
   if (!fileIds || fileIds.length === 0) return [];
   const { data, error } = await supabase
     .from("files")
-    .select("file_id, stored_filename, data_summary")
+    .select("file_id, stored_filename, data_summary, lesson_date, lesson_number")
     .in("file_id", fileIds.map(Number));
   if (error) throw error;
-  return data || [];
+  
+  // Sort the results to maintain consistent order
+  const sortedData = (data || []).sort((a, b) => {
+    // First sort by lesson_date
+    const dateA = new Date(a.lesson_date || 0);
+    const dateB = new Date(b.lesson_date || 0);
+    if (dateA.getTime() !== dateB.getTime()) {
+      return dateA.getTime() - dateB.getTime();
+    }
+    // Then by lesson_number
+    return (a.lesson_number || 0) - (b.lesson_number || 0);
+  });
+  
+  return sortedData;
 }
 
 // Fetch chunks for given file IDs with all necessary fields for charting

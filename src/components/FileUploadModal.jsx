@@ -243,14 +243,17 @@ export default function FileUploadModal({ isOpen, onClose }) {
       let classId = selectedSubject.classId;
       console.log('Initial classId from mapping:', classId);
       
-      // Check if user already has a class for this subject
-      console.log('Checking for existing class with user_id:', userId, 'and class_name:', formData.subject);
-      const { data: existingClass } = await supabase
-        .from('classes')
-        .select('class_id')
+      // Check if user already has files in a class with this subject name
+      // Since classes table has no user_id, we check through user's files
+      console.log('Checking for existing class through user files, subject:', formData.subject);
+      const { data: userFiles } = await supabase
+        .from('files')
+        .select('class_id, classes!inner(class_name)')
         .eq('user_id', userId)
-        .eq('class_name', formData.subject)
-        .single();
+        .eq('classes.class_name', formData.subject)
+        .limit(1);
+      
+      const existingClass = userFiles && userFiles.length > 0 ? { class_id: userFiles[0].class_id } : null;
       
       console.log('Existing class check result:', existingClass);
       
@@ -259,9 +262,8 @@ export default function FileUploadModal({ isOpen, onClose }) {
         console.log('Using existing class_id:', classId);
       } else {
         console.log('No existing class found, creating new one');
-        // Create a new class for this user and subject
+        // Create a new class (no user_id in classes table)
         const newClassData = {
-          user_id: userId,
           class_name: formData.subject,
           description: `${formData.subject} class`,
           education_level: selectedSubject.schoolCode === 'N' ? 'Primary' : 'Secondary'
@@ -288,7 +290,8 @@ export default function FileUploadModal({ isOpen, onClose }) {
       setUploadProgress(75);
       
       const fileInsertData = {
-        class_id: classId,
+        user_id: userId, // Direct user relationship
+        class_id: classId, // Keep as label/category (non-foreign key)
         original_filename: formData.file.name,
         stored_filename: fileName,
         file_path: filePath, // Use the full path including user directory
