@@ -95,13 +95,14 @@ function getAverageStats(allStats) {
 // -----------------------------
 // Component
 // -----------------------------
-export default function TrendChart() {
+export default function TrendChart({ lessonFilter = [] }) {
   const { user } = useUser();
   const [fileSummaries, setFileSummaries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [displayMode, setDisplayMode] = useState("percent"); // percent | value
   const [selectedAreas, setSelectedAreas] = useState([...TEACHING_AREA_CODES]);
   const [chartView, setChartView] = useState("line"); // line | groupedBar | total
+  const [lessonFilterState, setLessonFilter] = useState(lessonFilter);
 
   // ---------------------------------
   // Fetch
@@ -136,14 +137,14 @@ export default function TrendChart() {
         setLoading(false);
         return;
       }
-      
+
       // Filter out audio files (.mp3, .mp4, .wav, .m4a) - only include transcript files
       const filteredFiles = fileRows.filter(file => {
         const filename = file.stored_filename || '';
         const isAudioFile = /\.(mp3|mp4|wav|m4a)$/i.test(filename);
         return !isAudioFile; // Exclude audio files
       });
-      
+
       setFileSummaries(filteredFiles);
       setLoading(false);
     }
@@ -161,16 +162,23 @@ export default function TrendChart() {
     [fileSummaries]
   );
 
+  // Apply lessonFilter to filter the fileSummaries
+  const filteredFileSummaries = useMemo(() => {
+    return fileSummaries.filter((file) =>
+      lessonFilterState.length === 0 || lessonFilterState.includes(stripXlsx(file.stored_filename))
+    );
+  }, [fileSummaries, lessonFilterState]);
+
   const allStats = useMemo(
     () =>
-      fileSummaries.map((f) =>
+      filteredFileSummaries.map((f) =>
         parseTeachingAreaStats((f.data_summary || "").replace(/\\n/g, "\n"))
       ),
-    [fileSummaries]
+    [filteredFileSummaries]
   );
 
   const chartDataLine = useMemo(() => {
-    return fileSummaries.map((file, idx) => {
+    return filteredFileSummaries.map((file, idx) => {
       const stats = parseTeachingAreaStats(
         (file.data_summary || "").replace(/\\n/g, "\n")
       );
@@ -182,13 +190,13 @@ export default function TrendChart() {
       });
       return entry;
     });
-  }, [fileSummaries, displayMode]);
+  }, [filteredFileSummaries, displayMode]);
 
   // Grouped bar: one row per area, multiple bars per lesson
   const chartDataGroupedBar = useMemo(() => {
     return TEACHING_AREA_CODES.map((code) => {
       const row = { code: code.split(" ")[0] };
-      fileSummaries.forEach((file, idx) => {
+      filteredFileSummaries.forEach((file, idx) => {
         const stats = parseTeachingAreaStats(
           (file.data_summary || "").replace(/\\n/g, "\n")
         );
@@ -197,7 +205,7 @@ export default function TrendChart() {
       });
       return row;
     });
-  }, [fileSummaries, displayMode]);
+  }, [filteredFileSummaries, displayMode]);
 
   // Total distribution: if percent -> average % per area; if value -> sum of utterances
   const chartDataTotal = useMemo(() => {
@@ -227,6 +235,14 @@ export default function TrendChart() {
     setSelectedAreas([]);
   }
 
+  function handleLessonFilterChange(e) {
+    const { options } = e.target;
+    const selectedLessons = Array.from(options)
+      .filter((option) => option.selected)
+      .map((option) => option.value);
+    setLessonFilter(selectedLessons);
+  }
+
   const yTick = (val) => (displayMode === "percent" ? `${val}%` : val);
   const tooltipFmt = (val) => (displayMode === "percent" ? `${val}%` : val);
 
@@ -235,6 +251,23 @@ export default function TrendChart() {
       <h2 className="text-indigo-700 font-semibold mb-2 text-lg md:text-xl">
         Teaching Area Trends
       </h2>
+
+      {/* Lesson Filter (for line and groupedBar chart view) */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+        <label className="text-xs">Filter Lessons: </label>
+        <select
+          multiple
+          className="border px-2 py-1 rounded-md text-sm"
+          onChange={handleLessonFilterChange}
+          value={lessonFilterState}
+        >
+          {lessons.map((lesson, idx) => (
+            <option key={idx} value={lesson}>
+              {lesson}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* Chart View Switcher */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
