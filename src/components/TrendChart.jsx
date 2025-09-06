@@ -235,12 +235,12 @@ export default function TrendChart({ lessonFilter = [] }) {
     setSelectedAreas([]);
   }
 
+  // Update the filter to handle multiple selections with checkboxes
   function handleLessonFilterChange(e) {
-    const { options } = e.target;
-    const selectedLessons = Array.from(options)
-      .filter((option) => option.selected)
-      .map((option) => option.value);
-    setLessonFilter(selectedLessons);
+    const { value, checked } = e.target;
+    setLessonFilter((prev) =>
+      checked ? [...prev, value] : prev.filter((lesson) => lesson !== value)
+    );
   }
 
   const yTick = (val) => (displayMode === "percent" ? `${val}%` : val);
@@ -255,18 +255,20 @@ export default function TrendChart({ lessonFilter = [] }) {
       {/* Lesson Filter (for line and groupedBar chart view) */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
         <label className="text-xs">Filter Lessons: </label>
-        <select
-          multiple
-          className="border px-2 py-1 rounded-md text-sm"
-          onChange={handleLessonFilterChange}
-          value={lessonFilterState}
-        >
+        <div className="flex flex-wrap gap-2">
           {lessons.map((lesson, idx) => (
-            <option key={idx} value={lesson}>
+            <label key={idx} className="flex items-center gap-1 text-xs font-bold cursor-pointer select-none">
+              <input
+                type="checkbox"
+                value={lesson}
+                checked={lessonFilterState.includes(lesson)}
+                onChange={handleLessonFilterChange}
+                className="accent-blue-600"
+              />
               {lesson}
-            </option>
+            </label>
           ))}
-        </select>
+        </div>
       </div>
 
       {/* Chart View Switcher */}
