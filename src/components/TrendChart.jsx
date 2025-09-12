@@ -79,6 +79,44 @@ function stripXlsx(filename) {
   return (filename || "").replace(/\.xlsx$/i, "");
 }
 
+// Parse lesson name to create short labels for x-axis
+function parseLessonLabel(filename) {
+  if (!filename) return "Unknown";
+  
+  // Remove .xlsx extension if present
+  const cleanName = stripXlsx(filename);
+  
+  // Pattern: Subject_LessonNumber_Date or Subject_LessonNumber-Date
+  const match = cleanName.match(/^([^_]+)_Lesson(\d+)[_-](\d{2}-\d{2}-\d{4})/i);
+  
+  if (match) {
+    const [, subject, lessonNum] = match;
+    
+    // Shorten subject names
+    const subjectMap = {
+      'Mathematics': 'Math',
+      'English': 'Eng',
+      'Science': 'Sci',
+      'Social Studies': 'SS',
+      'Geography': 'Geo',
+      'History': 'Hist',
+      'Chemistry': 'Chem'
+    };
+    
+    const shortSubject = subjectMap[subject] || subject.substring(0, 4);
+    return `${shortSubject}_L${lessonNum}`;
+  }
+  
+  // Fallback: try to extract lesson number from any pattern
+  const lessonMatch = cleanName.match(/Lesson(\d+)/i);
+  if (lessonMatch) {
+    return `L${lessonMatch[1]}`;
+  }
+  
+  // Final fallback: use first 8 characters
+  return cleanName.substring(0, 8);
+}
+
 function getAverageStats(allStats) {
   return TEACHING_AREA_CODES.map((code) => {
     const total = allStats.reduce(
@@ -156,9 +194,10 @@ export default function TrendChart({ lessonFilter = [] }) {
   // ---------------------------------
   const lessons = useMemo(
     () =>
-      fileSummaries.map((f, idx) =>
-        stripXlsx(f.stored_filename || `Lesson #${idx + 1}`)
-      ),
+      fileSummaries.map((f, idx) => ({
+        shortLabel: parseLessonLabel(f.stored_filename || `Lesson #${idx + 1}`),
+        fullName: stripXlsx(f.stored_filename || `Lesson #${idx + 1}`)
+      })),
     [fileSummaries]
   );
 
@@ -182,8 +221,10 @@ export default function TrendChart({ lessonFilter = [] }) {
       const stats = parseTeachingAreaStats(
         (file.data_summary || "").replace(/\\n/g, "\n")
       );
+      const fullLessonName = stripXlsx(file.stored_filename || `Lesson #${idx + 1}`);
       const entry = {
-        lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`),
+        lesson: parseLessonLabel(file.stored_filename || `Lesson #${idx + 1}`), // Short label for x-axis
+        fullLessonName: fullLessonName, // Keep full name for tooltips
       };
       TEACHING_AREA_CODES.forEach((code) => {
         entry[code] = getStatValue(stats[code], displayMode);
@@ -200,8 +241,8 @@ export default function TrendChart({ lessonFilter = [] }) {
         const stats = parseTeachingAreaStats(
           (file.data_summary || "").replace(/\\n/g, "\n")
         );
-        row[stripXlsx(file.stored_filename || `Lesson #${idx + 1}`)] =
-          getStatValue(stats[code], displayMode);
+        const shortLabel = parseLessonLabel(file.stored_filename || `Lesson #${idx + 1}`);
+        row[shortLabel] = getStatValue(stats[code], displayMode);
       });
       return row;
     });
@@ -245,6 +286,27 @@ export default function TrendChart({ lessonFilter = [] }) {
 
   const yTick = (val) => (displayMode === "percent" ? `${val}%` : val);
   const tooltipFmt = (val) => (displayMode === "percent" ? `${val}%` : val);
+  
+  // Custom tooltip formatter for line chart to show full lesson names
+  const customTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      // Find the full lesson name from the data
+      const dataPoint = chartDataLine.find(item => item.lesson === label);
+      const fullLessonName = dataPoint?.fullLessonName || label;
+      
+      return (
+        <div className="bg-white p-3 border border-gray-300 rounded shadow-lg">
+          <p className="font-semibold text-gray-800 mb-2">{fullLessonName}</p>
+          {payload.map((entry, index) => (
+            <p key={index} style={{ color: entry.color }} className="text-sm">
+              {`${entry.name}: ${tooltipFmt(entry.value)}`}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <section className="rounded-2xl shadow-lg bg-white/90 border border-blue-100 px-2 md:px-6 py-6 flex flex-col items-center">
@@ -260,12 +322,12 @@ export default function TrendChart({ lessonFilter = [] }) {
             <label key={idx} className="flex items-center gap-1 text-xs font-bold cursor-pointer select-none">
               <input
                 type="checkbox"
-                value={lesson}
-                checked={lessonFilterState.includes(lesson)}
+                value={lesson.fullName}
+                checked={lessonFilterState.includes(lesson.fullName)}
                 onChange={handleLessonFilterChange}
                 className="accent-blue-600"
               />
-              {lesson}
+              <span title={lesson.fullName}>{lesson.shortLabel}</span>
             </label>
           ))}
         </div>
@@ -382,7 +444,7 @@ export default function TrendChart({ lessonFilter = [] }) {
                 interval={0}
               />
               <YAxis tickFormatter={yTick} />
-              <Tooltip formatter={tooltipFmt} />
+              <Tooltip content={customTooltip} />
               {TEACHING_AREA_CODES.filter((code) =>
                 selectedAreas.includes(code)
               ).map((code, idx) => (
@@ -426,15 +488,19 @@ export default function TrendChart({ lessonFilter = [] }) {
               <YAxis tickFormatter={yTick} />
               <Tooltip formatter={tooltipFmt} />
               <Legend verticalAlign="top" align="center" />
-              {lessons.map((lesson, idx) => (
-                <Bar
-                  key={lesson}
-                  dataKey={lesson}
-                  name={lesson}
-                  fill={LINE_COLORS[idx % LINE_COLORS.length]}
-                  radius={[4, 4, 0, 0]}
-                />
-              ))}
+              {filteredFileSummaries.map((file, idx) => {
+                const shortLabel = parseLessonLabel(file.stored_filename || `Lesson #${idx + 1}`);
+                const fullName = stripXlsx(file.stored_filename || `Lesson #${idx + 1}`);
+                return (
+                  <Bar
+                    key={shortLabel}
+                    dataKey={shortLabel}
+                    name={fullName} // Use full name for legend
+                    fill={LINE_COLORS[idx % LINE_COLORS.length]}
+                    radius={[4, 4, 0, 0]}
+                  />
+                );
+              })}
             </BarChart>
           </ResponsiveContainer>
         ) : (

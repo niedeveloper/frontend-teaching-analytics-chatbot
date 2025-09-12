@@ -82,16 +82,22 @@ export default function FileUploadModal({ isOpen, onClose }) {
     console.log('File type:', formData.file.type);
 
     try {
-      // Create organized filename for test upload using new structure
-      const subject = formData.subject || 'Test';
+      // Create filename for test upload using backend expected format
+      const subject = formData.subject || 'English';
+      const selectedSubject = subjectMapping[subject] || { schoolCode: 'N', code: 'T1' };
       const lessonNumber = formData.lessonNumber || 1;
       const lessonDate = formData.lessonDate ? new Date(formData.lessonDate) : new Date();
-      const dateString = lessonDate.toISOString().split('T')[0];
+      
+      // Convert date to DD-MM-YYYY format for backend
+      const day = lessonDate.getDate().toString().padStart(2, '0');
+      const month = (lessonDate.getMonth() + 1).toString().padStart(2, '0');
+      const year = lessonDate.getFullYear();
+      const dateString = `${day}-${month}-${year}`;
+      
       const fileExtension = formData.file.name.split('.').pop() || 'mp3';
       
-      // Generate short UUID for uniqueness
-      const shortUuid = Math.random().toString(36).substring(2, 10);
-      const fileName = `${dateString}_Lesson${lessonNumber}_${shortUuid}.${fileExtension}`;
+      // Generate filename: {schoolCode}_{subjectCode}_L{lessonNumber}_{DD-MM-YYYY}.{ext}
+      const fileName = `${selectedSubject.schoolCode}_${selectedSubject.code}_L${lessonNumber}_${dateString}.${fileExtension}`;
       const filePath = `users/test_user/${subject}/audio/${fileName}`;
       console.log('Attempting to upload:', filePath);
 
@@ -177,15 +183,21 @@ export default function FileUploadModal({ isOpen, onClose }) {
       setUploadProgress(15);
       
       // Step 2: Upload file to Supabase Storage
-      // Create organized filename with new user-based structure: users/user_id/subject/YYYY-MM-DD_LessonX_uuid.ext
+      // Create filename matching backend expected format: {schoolCode}_{subjectCode}_L{lessonNumber}_{DD-MM-YYYY}.{ext}
       const subject = formData.subject;
+      const selectedSubject = subjectMapping[subject];
       const lessonDate = new Date(formData.lessonDate);
-      const dateString = lessonDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      // Convert date to DD-MM-YYYY format for backend
+      const day = lessonDate.getDate().toString().padStart(2, '0');
+      const month = (lessonDate.getMonth() + 1).toString().padStart(2, '0');
+      const year = lessonDate.getFullYear();
+      const dateString = `${day}-${month}-${year}`;
+      
       const fileExtension = formData.file.name.split('.').pop() || 'mp3';
       
-      // Generate short UUID for uniqueness
-      const shortUuid = Math.random().toString(36).substring(2, 10); // 8 character random string
-      const fileName = `${dateString}_Lesson${formData.lessonNumber}_${shortUuid}.${fileExtension}`;
+      // Generate filename: {schoolCode}_{subjectCode}_L{lessonNumber}_{DD-MM-YYYY}.{ext}
+      const fileName = `${selectedSubject.schoolCode}_${selectedSubject.code}_L${formData.lessonNumber}_${dateString}.${fileExtension}`;
       const filePath = `users/${userId}/${subject}/audio/${fileName}`;
       console.log('Step 2: Uploading file to storage');
       console.log('File name:', fileName);
@@ -232,110 +244,29 @@ export default function FileUploadModal({ isOpen, onClose }) {
               
               setUploadProgress(50);
 
-      // Step 3: Create file record in database
-      const selectedSubject = subjectMapping[formData.subject];
-      console.log('Step 3: Creating file record in database');
+      // Step 3: Skip database inserts for files and classes tables
+      console.log('Step 3: Skipping database inserts for files and classes tables');
       console.log('Selected subject:', formData.subject);
       console.log('Subject mapping:', selectedSubject);
-      setUploadProgress(60);
-      
-      // First, check if user has a class for this subject, if not create one
-      let classId = selectedSubject.classId;
-      console.log('Initial classId from mapping:', classId);
-      
-      // Check if user already has files in a class with this subject name
-      // Since classes table has no user_id, we check through user's files
-      console.log('Checking for existing class through user files, subject:', formData.subject);
-      const { data: userFiles } = await supabase
-        .from('files')
-        .select('class_id, classes!inner(class_name)')
-        .eq('user_id', userId)
-        .eq('classes.class_name', formData.subject)
-        .limit(1);
-      
-      const existingClass = userFiles && userFiles.length > 0 ? { class_id: userFiles[0].class_id } : null;
-      
-      console.log('Existing class check result:', existingClass);
-      
-      if (existingClass) {
-        classId = existingClass.class_id;
-        console.log('Using existing class_id:', classId);
-      } else {
-        console.log('No existing class found, creating new one');
-        // Create a new class (no user_id in classes table)
-        const newClassData = {
-          class_name: formData.subject,
-          description: `${formData.subject} class`,
-          education_level: selectedSubject.schoolCode === 'N' ? 'Primary' : 'Secondary'
-        };
-        console.log('Creating new class with data:', newClassData);
-        
-        const { data: newClass, error: classError } = await supabase
-          .from('classes')
-          .insert(newClassData)
-          .select()
-          .single();
-        
-        console.log('New class creation result:', newClass);
-        console.log('New class creation error:', classError);
-        
-        if (classError) {
-          throw new Error(`Failed to create class: ${classError.message}`);
-        }
-        
-        classId = newClass.class_id;
-        console.log('New class_id created:', classId);
-      }
-      
       setUploadProgress(75);
-      
-      const fileInsertData = {
-        user_id: userId, // Direct user relationship
-        class_id: classId, // Keep as label/category (non-foreign key)
-        original_filename: formData.file.name,
-        stored_filename: fileName,
-        file_path: filePath, // Use the full path including user directory
-        school_code: selectedSubject.schoolCode,
-        subject_code: selectedSubject.code,
-        lesson_number: parseInt(formData.lessonNumber),
-        lesson_date: formData.lessonDate,
-        upload_date: new Date().toISOString(),
-        processing_status: 'pending',
-        file_size: formData.file.size
-      };
-      
-      console.log('Inserting file with data:', fileInsertData);
-      
-      const { data: fileRecord, error: dbError } = await supabase
-        .from('files')
-        .insert(fileInsertData)
-        .select()
-        .single();
-
-      console.log('File insert result:', fileRecord);
-      console.log('File insert error:', dbError);
-
-      if (dbError) {
-        throw new Error(`Database error: ${dbError.message}`);
-      }
-
-      setUploadProgress(85);
 
       // Step 4: Create task for processing
       console.log('Step 4: Creating processing task');
-      console.log('File ID:', fileRecord.file_id);
       console.log('File path:', filePath);
+      console.log('Generated filename:', fileName);
       setUploadProgress(90);
       
       // Create task record for background processing
       const taskData = {
-        file_id: fileRecord.file_id,
         task_type: 'audio_processing',
         status: 'pending',
         metadata: {
           file_path: filePath,
+          filename: fileName, // Store the parsed filename for backend processing
           original_filename: formData.file.name,
           subject: formData.subject,
+          school_code: selectedSubject.schoolCode,
+          subject_code: selectedSubject.code,
           lesson_number: parseInt(formData.lessonNumber),
           lesson_date: formData.lessonDate
         }
@@ -364,14 +295,14 @@ export default function FileUploadModal({ isOpen, onClose }) {
       
       // Success
       const fileSizeMB = (formData.file?.size / (1024 * 1024)).toFixed(1);
-      setUploadedFileName(fileName); // Use the organized filename
+      setUploadedFileName(fileName); // Use the parsed filename
       setUploadedFileSize(fileSizeMB);
       
       console.log('=== UPLOAD SUCCESS ===');
       console.log('File uploaded successfully:', formData.file.name);
-      console.log('Organized filename:', fileName);
+      console.log('Parsed filename:', fileName);
       console.log('File size:', fileSizeMB, 'MB');
-      console.log('File record created:', fileRecord);
+      console.log('Task created:', taskRecord);
       
       // Reset form data first
       setFormData({

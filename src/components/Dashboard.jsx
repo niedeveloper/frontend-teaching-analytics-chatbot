@@ -208,7 +208,6 @@ export default function Dashboard() {
         .from("tasks")
         .select(`
           task_id,
-          file_id,
           task_type,
           status,
           created_at,
@@ -217,14 +216,8 @@ export default function Dashboard() {
           completed_at,
           error_message,
           retry_count,
-          metadata,
-          files!inner(
-            stored_filename,
-            user_id,
-            class_id
-          )
+          metadata
         `)
-        .eq("files.user_id", userId)
         .order("created_at", { ascending: false })
         .limit(20);
       
@@ -617,7 +610,7 @@ export default function Dashboard() {
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex-1">
                             <h4 className="text-lg font-semibold text-gray-900 mb-1">
-                              {task.files?.stored_filename || 'Unknown File'}
+                              {task.metadata?.filename || task.metadata?.original_filename || 'Unknown File'}
                             </h4>
                             <div className="flex items-center gap-4 text-sm text-gray-500">
                               <div className="flex items-center gap-1">
@@ -647,7 +640,7 @@ export default function Dashboard() {
                               Subject
                             </div>
                             <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                              {task.files?.classes?.class_name || task.metadata?.subject || 'Unknown'}
+                              {task.metadata?.subject || 'Unknown Subject'}
                             </div>
                           </div>
                           
