@@ -229,6 +229,9 @@ export default function StorageFilesModal({ open, onClose }) {
 
       const files = storageItems
         .filter(item => item.id !== null) // Files have id !== null
+        .filter(item => !item.name.startsWith('.emptyFolderPlaceholder') && 
+                       !item.name.includes('placeholder') && 
+                       !item.name.startsWith('.')) // Filter out placeholder files and hidden files
         .map(file => ({
           type: 'file',
           name: file.name,

@@ -260,6 +260,7 @@ export default function FileUploadModal({ isOpen, onClose }) {
       const taskData = {
         task_type: 'audio_processing',
         status: 'pending',
+        user_id: userId, // Add user_id for filtering
         metadata: {
           file_path: filePath,
           filename: fileName, // Store the parsed filename for backend processing

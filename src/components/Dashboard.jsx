@@ -5,7 +5,7 @@ import { useUser } from "../context/UserContext";
 import { getAuth, signOut } from "firebase/auth";
 import firebaseApp from "../lib/firebase";
 import { supabase } from "../lib/supabaseClient";
-import { MessageSquare, Eye, Download, Play, Clock, FileText, Hash, Calendar, ArrowRight, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { MessageSquare, Eye, Download, Play, Clock, FileText, Hash, Calendar, ArrowRight, Loader2, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 import * as Tooltip from '@radix-ui/react-tooltip';
 import * as Separator from '@radix-ui/react-separator';
 
@@ -16,6 +16,7 @@ import ClassFileTable from "./ClassFileTable.jsx";
 import DataUploadForm from "./DataUploadForm.jsx";
 import ChatHistoryModal from "./ChatHistoryModal.jsx";
 import StorageFilesModal from "./StorageFilesModal.jsx";
+import FileBrowserButton from "./FileBrowserButton.jsx";
 
 export default function Dashboard() {
   const { user, setUser } = useUser();
@@ -44,6 +45,10 @@ export default function Dashboard() {
   // Task status state
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  
+  // Expandable sections state
+  const [isConversationsExpanded, setIsConversationsExpanded] = useState(false);
+  const [isTasksExpanded, setIsTasksExpanded] = useState(false);
 
   // Ref for ClassFileTable to scroll to
   const classFileTableRef = useRef(null);
@@ -218,6 +223,7 @@ export default function Dashboard() {
           retry_count,
           metadata
         `)
+        .eq("user_id", userId) // Filter tasks by user_id
         .order("created_at", { ascending: false })
         .limit(20);
       
@@ -351,7 +357,7 @@ export default function Dashboard() {
   };
 
   // Function to open storage files modal
-  const handleLessonsClick = () => {
+  const handleFileBrowserClick = () => {
     setShowStorageFilesModal(true);
   };
 
@@ -362,8 +368,11 @@ export default function Dashboard() {
         <SummaryCards 
           summary={summary} 
           handleFileTextClick={handleFileTextClick} // Pass the function as prop
-          handleLessonsClick={handleLessonsClick} // Pass the new lessons handler
         />
+        
+        {/* File Browser Button */}
+        <FileBrowserButton onClick={handleFileBrowserClick} />
+        
         <DataUploadForm />
         <TrendChart />
 
@@ -396,19 +405,32 @@ export default function Dashboard() {
                     <p className="text-gray-600 mt-1">Your teaching analytics chat history and insights</p>
                   </div>
                 </div>
-                {chatSessions.length > 0 && (
-                  <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
-                    {chatSessions.length} session{chatSessions.length !== 1 ? 's' : ''}
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  {chatSessions.length > 0 && (
+                    <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                      {chatSessions.length} session{chatSessions.length !== 1 ? 's' : ''}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setIsConversationsExpanded(!isConversationsExpanded)}
+                    className="p-2 text-gray-600 hover:text-gray-800 hover:bg-white rounded-lg transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    {isConversationsExpanded ? (
+                      <ChevronDown className="w-5 h-5" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
             
             {/* Content */}
-            <div className="p-6">
+            {isConversationsExpanded && (
+              <div className="p-6">
 
-              {/* Loading State */}
-              {chatHistoryLoading ? (
+                {/* Loading State */}
+                {chatHistoryLoading ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <div className="relative">
                     <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-100 border-t-blue-600"></div>
@@ -545,7 +567,8 @@ export default function Dashboard() {
                   ))}
                 </div>
               )}
-            </div>
+              </div>
+            )}
           </div>
         </Tooltip.Provider>
 
@@ -564,18 +587,31 @@ export default function Dashboard() {
                     <p className="text-gray-600 mt-1">Monitor your file processing status</p>
                   </div>
                 </div>
-                {tasks.length > 0 && (
-                  <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
-                    {tasks.length} task{tasks.length !== 1 ? 's' : ''}
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  {tasks.length > 0 && (
+                    <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                      {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setIsTasksExpanded(!isTasksExpanded)}
+                    className="p-2 text-gray-600 hover:text-gray-800 hover:bg-white rounded-lg transition-all duration-200 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                  >
+                    {isTasksExpanded ? (
+                      <ChevronDown className="w-5 h-5" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
             
             {/* Content */}
-            <div className="p-6">
-              {/* Loading State */}
-              {tasksLoading ? (
+            {isTasksExpanded && (
+              <div className="p-6">
+                {/* Loading State */}
+                {tasksLoading ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <div className="relative">
                     <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-100 border-t-green-600"></div>
@@ -689,7 +725,8 @@ export default function Dashboard() {
                   })}
                 </div>
               )}
-            </div>
+              </div>
+            )}
           </div>
         </Tooltip.Provider>
       </div>
