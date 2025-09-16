@@ -67,84 +67,13 @@ export default function FileUploadModal({ isOpen, onClose }) {
     }
   };
 
-  // Simple test upload function
-  const handleSimpleUpload = async () => {
-    if (!formData.file) {
-      setErrorMessage('Please select a file first');
-      setShowErrorToast(true);
-      return;
-    }
-
-    console.log('=== SIMPLE UPLOAD TEST START ===');
-    console.log('File to upload:', formData.file);
-    console.log('File name:', formData.file.name);
-    console.log('File size:', formData.file.size);
-    console.log('File type:', formData.file.type);
-
-    try {
-      // Create filename for test upload using backend expected format
-      const subject = formData.subject || 'English';
-      const selectedSubject = subjectMapping[subject] || { schoolCode: 'N', code: 'T1' };
-      const lessonNumber = formData.lessonNumber || 1;
-      const lessonDate = formData.lessonDate ? new Date(formData.lessonDate) : new Date();
-      
-      // Convert date to DD-MM-YYYY format for backend
-      const day = lessonDate.getDate().toString().padStart(2, '0');
-      const month = (lessonDate.getMonth() + 1).toString().padStart(2, '0');
-      const year = lessonDate.getFullYear();
-      const dateString = `${day}-${month}-${year}`;
-      
-      const fileExtension = formData.file.name.split('.').pop() || 'mp3';
-      
-      // Generate filename: {schoolCode}_{subjectCode}_L{lessonNumber}_{DD-MM-YYYY}.{ext}
-      const fileName = `${selectedSubject.schoolCode}_${selectedSubject.code}_L${lessonNumber}_${dateString}.${fileExtension}`;
-      const filePath = `users/test_user/${subject}/audio/${fileName}`;
-      console.log('Attempting to upload:', filePath);
-
-      // Use service key for storage upload (bypasses RLS)
-      const uploadUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/upload/${filePath}`;
-      
-      const response = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY}`,
-          'Content-Type': formData.file.type,
-          'Cache-Control': '3600',
-          'x-upsert': 'false'
-        },
-        body: formData.file
-      });
-
-      console.log('Upload response status:', response.status);
-      const responseText = await response.text();
-      console.log('Upload response body:', responseText);
-
-      if (response.ok) {
-        console.log('=== SIMPLE UPLOAD SUCCESS ===');
-        setErrorMessage('');
-        setShowSuccessToast(true);
-        setShowErrorToast(false);
-      } else {
-        throw new Error(`Upload failed with status ${response.status}: ${responseText}`);
-      }
-
-    } catch (error) {
-      console.error('=== SIMPLE UPLOAD ERROR ===');
-      console.error('Simple upload error:', error);
-      setErrorMessage(`Simple upload failed: ${error.message}`);
-      setShowErrorToast(true);
-      setShowSuccessToast(false);
-    }
-    
-    console.log('=== SIMPLE UPLOAD TEST END ===');
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    console.log('=== UPLOAD DEBUG START ===');
-    console.log('Form data:', formData);
-    console.log('User email:', user?.email);
+    // console.log('=== UPLOAD DEBUG START ===');
+    // console.log('Form data:', formData);
+    // console.log('User email:', user?.email);
     
     if (!user?.email) {
       setErrorMessage('Please log in to upload files');
@@ -164,22 +93,22 @@ export default function FileUploadModal({ isOpen, onClose }) {
 
     try {
       // Step 1: Get user_id from users table
-      console.log('Step 1: Getting user_id for email:', user.email);
+      // console.log('Step 1: Getting user_id for email:', user.email);
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('user_id')
         .eq('email', user.email)
         .single();
       
-      console.log('User data result:', userData);
-      console.log('User error:', userError);
+      // console.log('User data result:', userData);
+      // console.log('User error:', userError);
       
       if (userError || !userData) {
         throw new Error('User not found in database');
       }
       
       const userId = userData.user_id;
-      console.log('User ID found:', userId);
+      // console.log('User ID found:', userId);
       setUploadProgress(15);
       
       // Step 2: Upload file to Supabase Storage
@@ -199,20 +128,20 @@ export default function FileUploadModal({ isOpen, onClose }) {
       // Generate filename: {schoolCode}_{subjectCode}_L{lessonNumber}_{DD-MM-YYYY}.{ext}
       const fileName = `${selectedSubject.schoolCode}_${selectedSubject.code}_L${formData.lessonNumber}_${dateString}.${fileExtension}`;
       const filePath = `users/${userId}/${subject}/audio/${fileName}`;
-      console.log('Step 2: Uploading file to storage');
-      console.log('File name:', fileName);
-      console.log('File path:', filePath);
-      console.log('File size:', formData.file.size);
-      console.log('File type:', formData.file.type);
-      console.log('Subject:', subject);
-      console.log('Lesson number:', formData.lessonNumber);
-      console.log('Date:', dateString);
+      // console.log('Step 2: Uploading file to storage');
+      // console.log('File name:', fileName);
+      // console.log('File path:', filePath);
+      // console.log('File size:', formData.file.size);
+      // console.log('File type:', formData.file.type);
+      // console.log('Subject:', subject);
+      // console.log('Lesson number:', formData.lessonNumber);
+      // console.log('Date:', dateString);
               
       // Debug: Check available storage buckets
-      console.log('Checking available storage buckets...');
+      // console.log('Checking available storage buckets...');
       const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-      console.log('Available buckets:', buckets);
-      console.log('Buckets error:', bucketsError);
+      // console.log('Available buckets:', buckets);
+      // console.log('Buckets error:', bucketsError);
               
       setUploadProgress(25);
               
@@ -230,9 +159,9 @@ export default function FileUploadModal({ isOpen, onClose }) {
                 body: formData.file
               });
 
-              console.log('Upload response status:', response.status);
+              // console.log('Upload response status:', response.status);
               const responseText = await response.text();
-              console.log('Upload response body:', responseText);
+              // console.log('Upload response body:', responseText);
 
               if (!response.ok) {
                 throw new Error(`Upload failed with status ${response.status}: ${responseText}`);
@@ -240,20 +169,20 @@ export default function FileUploadModal({ isOpen, onClose }) {
 
               // Parse the response to get the file path
               const uploadData = JSON.parse(responseText);
-              console.log('Storage upload result:', uploadData);
+              // console.log('Storage upload result:', uploadData);
               
               setUploadProgress(50);
 
       // Step 3: Skip database inserts for files and classes tables
-      console.log('Step 3: Skipping database inserts for files and classes tables');
-      console.log('Selected subject:', formData.subject);
-      console.log('Subject mapping:', selectedSubject);
+      // console.log('Step 3: Skipping database inserts for files and classes tables');
+      // console.log('Selected subject:', formData.subject);
+      // console.log('Subject mapping:', selectedSubject);
       setUploadProgress(75);
 
       // Step 4: Create task for processing
-      console.log('Step 4: Creating processing task');
-      console.log('File path:', filePath);
-      console.log('Generated filename:', fileName);
+      // console.log('Step 4: Creating processing task');
+      // console.log('File path:', filePath);
+      // console.log('Generated filename:', fileName);
       setUploadProgress(90);
       
       // Create task record for background processing
@@ -273,7 +202,7 @@ export default function FileUploadModal({ isOpen, onClose }) {
         }
       };
       
-      console.log('Creating task with data:', taskData);
+      // console.log('Creating task with data:', taskData);
       
       const { data: taskRecord, error: taskError } = await supabase
         .from('tasks')
@@ -281,17 +210,17 @@ export default function FileUploadModal({ isOpen, onClose }) {
         .select()
         .single();
 
-      console.log('Task creation result:', taskRecord);
-      console.log('Task creation error:', taskError);
+      // console.log('Task creation result:', taskRecord);
+      // console.log('Task creation error:', taskError);
 
       if (taskError) {
-        console.warn('Task creation failed, but file is uploaded:', taskError);
+        // console.warn('Task creation failed, but file is uploaded:', taskError);
         setErrorMessage('File uploaded successfully, but task creation failed. Processing may be delayed.');
         setShowErrorToast(true);
         return;
       }
 
-      console.log('Task created successfully:', taskRecord.task_id);
+      // console.log('Task created successfully:', taskRecord.task_id);
       setUploadProgress(100);
       
       // Success
@@ -299,11 +228,11 @@ export default function FileUploadModal({ isOpen, onClose }) {
       setUploadedFileName(fileName); // Use the parsed filename
       setUploadedFileSize(fileSizeMB);
       
-      console.log('=== UPLOAD SUCCESS ===');
-      console.log('File uploaded successfully:', formData.file.name);
-      console.log('Parsed filename:', fileName);
-      console.log('File size:', fileSizeMB, 'MB');
-      console.log('Task created:', taskRecord);
+      // console.log('=== UPLOAD SUCCESS ===');
+      // console.log('File uploaded successfully:', formData.file.name);
+      // console.log('Parsed filename:', fileName);
+      // console.log('File size:', fileSizeMB, 'MB');
+      // console.log('Task created:', taskRecord);
       
       // Reset form data first
       setFormData({
@@ -326,16 +255,16 @@ export default function FileUploadModal({ isOpen, onClose }) {
       }, 4000);
 
     } catch (error) {
-      console.error('=== UPLOAD ERROR ===');
-      console.error('Upload error:', error);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
+      // console.error('=== UPLOAD ERROR ===');
+      // console.error('Upload error:', error);
+      // console.error('Error message:', error.message);
+      // console.error('Error stack:', error.stack);
       setErrorMessage(error.message);
       setShowErrorToast(true);
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
-      console.log('=== UPLOAD DEBUG END ===');
+      // console.log('=== UPLOAD DEBUG END ===');
     }
   };
 
@@ -488,21 +417,6 @@ export default function FileUploadModal({ isOpen, onClose }) {
                     </div>
                   </div>
 
-                  {/* Simple Test Upload Button */}
-                  {formData.file && (
-                    <div className="border-t pt-4">
-                      <button
-                        type="button"
-                        onClick={handleSimpleUpload}
-                        className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition mb-2"
-                      >
-                        🧪 Test Simple Upload (Storage Only)
-                      </button>
-                      <p className="text-xs text-gray-500 text-center">
-                        This button tests just the storage upload without database operations
-                      </p>
-                    </div>
-                  )}
 
                   {/* Upload Progress */}
                   {isUploading && (
