@@ -442,7 +442,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
     id: 1,
     role: "assistant",
     content: fileNames.length > 0
-      ? `Hello! I'm your Teaching Analytics Chatbot. I can see you've selected these files to analyze: "${fileNames.join(", ")}". You can ask me anything about these lectures!`
+      ? `Hello! I'm your Teaching Analytics Chatbot. I can see you've selected these files to analyze: "${fileNames.join(", ")}". You can ask me anything about these lessons!`
       : "Hello! I'm your Teaching Analytics Chatbot. How can I help you with your lecture questions today?",
     timestamp: new Date(),
   }), [fileNames]);
@@ -709,7 +709,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
               {isResuming ? "Resuming Conversation" : "Teaching Analytics Chatbot"}
             </h5>
             <small className="opacity-75">
-              {isResuming ? "Continue your previous chat" : "Ask questions about your lectures"}
+              {isResuming ? "Continue your previous chat" : "Ask questions about your lessons"}
             </small>
           </div>
         </div>
@@ -763,7 +763,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
             {isResuming ? (
               <>You're continuing analysis of <strong>{fileNames.length} file(s)</strong>. You can ask more questions or start a new chat.</>
             ) : (
-              <>You've selected <strong>{fileNames.length} file(s)</strong>. You can now ask me anything about these lectures!</>
+              <>You've selected <strong>{fileNames.length} file(s)</strong>. You can now ask me anything about these lessons!</>
             )}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -869,7 +869,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
             className="flex-1 border rounded-2xl px-4 py-2 shadow-sm resize-none focus:outline-blue-400"
             placeholder={
               fileNames.length > 0
-                ? "Ask me anything about your selected lectures..."
+                ? "Ask me anything about your selected lessons..."
                 : "Type your message here..."
             }
             value={input}
