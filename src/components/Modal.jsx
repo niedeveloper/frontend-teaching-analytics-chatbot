@@ -144,6 +144,44 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
   function stripXlsx(filename) {
     return filename.replace(/\.xlsx$/i, "");
   }
+
+  // Parse lesson name to create short labels for x-axis (from TrendChart.jsx)
+  function parseLessonLabel(filename) {
+    if (!filename) return "Unknown";
+    
+    // Remove .xlsx extension if present
+    const cleanName = stripXlsx(filename);
+    
+    // Pattern: Subject_LessonNumber_Date or Subject_LessonNumber-Date
+    const match = cleanName.match(/^([^_]+)_Lesson(\d+)[_-](\d{2}-\d{2}-\d{4})/i);
+    
+    if (match) {
+      const [, subject, lessonNum] = match;
+      
+      // Shorten subject names
+      const subjectMap = {
+        'Mathematics': 'Math',
+        'English': 'Eng',
+        'Science': 'Sci',
+        'Social Studies': 'SS',
+        'Geography': 'Geo',
+        'History': 'Hist',
+        'Chemistry': 'Chem'
+      };
+      
+      const shortSubject = subjectMap[subject] || subject.substring(0, 4);
+      return `${shortSubject}_L${lessonNum}`;
+    }
+    
+    // Fallback: try to extract lesson number from any pattern
+    const lessonMatch = cleanName.match(/Lesson(\d+)/i);
+    if (lessonMatch) {
+      return `L${lessonMatch[1]}`;
+    }
+    
+    // Final fallback: use first 8 characters
+    return cleanName.substring(0, 8);
+  }
   const lessonNames = fileSummaries.map((file, idx) => stripXlsx(file.stored_filename || `Lesson #${idx + 1}`));
   const groupedBarData = TEACHING_AREA_CODES.map((code) => {
     const entry = { code: code.split(" ")[0] };
@@ -187,7 +225,7 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
   // Line chart (Utterances per Teaching Area Across Lessons) data precompute with aggregated trend
   const lineChartData = fileSummaries.map((file, idx) => {
     const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
-    const entry = { lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`) };
+    const entry = { lesson: parseLessonLabel(file.stored_filename || `Lesson #${idx + 1}`) };
     TEACHING_AREA_CODES.forEach((code) => {
       entry[code] = displayMode === 'percent' ? (stats[code]?.percent || 0) : (stats[code]?.value || 0);
     });

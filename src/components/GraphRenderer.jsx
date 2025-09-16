@@ -58,6 +58,44 @@ function stripXlsx(filename) {
   return filename.replace(/\.xlsx$/i, "");
 }
 
+// Parse lesson name to create short labels for x-axis (from TrendChart.jsx)
+function parseLessonLabel(filename) {
+  if (!filename) return "Unknown";
+  
+  // Remove .xlsx extension if present
+  const cleanName = stripXlsx(filename);
+  
+  // Pattern: Subject_LessonNumber_Date or Subject_LessonNumber-Date
+  const match = cleanName.match(/^([^_]+)_Lesson(\d+)[_-](\d{2}-\d{2}-\d{4})/i);
+  
+  if (match) {
+    const [, subject, lessonNum] = match;
+    
+    // Shorten subject names
+    const subjectMap = {
+      'Mathematics': 'Math',
+      'English': 'Eng',
+      'Science': 'Sci',
+      'Social Studies': 'SS',
+      'Geography': 'Geo',
+      'History': 'Hist',
+      'Chemistry': 'Chem'
+    };
+    
+    const shortSubject = subjectMap[subject] || subject.substring(0, 4);
+    return `${shortSubject}_L${lessonNum}`;
+  }
+  
+  // Fallback: try to extract lesson number from any pattern
+  const lessonMatch = cleanName.match(/Lesson(\d+)/i);
+  if (lessonMatch) {
+    return `L${lessonMatch[1]}`;
+  }
+  
+  // Final fallback: use first 8 characters
+  return cleanName.substring(0, 8);
+}
+
 function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaFilter = [] }) {
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -215,7 +253,7 @@ function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaF
           const effectiveAreaCodes = memoizedAreaFilter.length > 0 ? memoizedAreaFilter : TEACHING_AREA_CODES.map(code => code.split(" ")[0]);
           const lineChartData = filteredFiles.map((file, idx) => {
             const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
-            const entry = { lesson: stripXlsx(file.stored_filename || `Lesson #${idx + 1}`) };
+            const entry = { lesson: parseLessonLabel(file.stored_filename || `Lesson #${idx + 1}`) };
             effectiveAreaCodes.forEach((code) => {
               entry[code] = stats[code]?.percent || 0;
             });
