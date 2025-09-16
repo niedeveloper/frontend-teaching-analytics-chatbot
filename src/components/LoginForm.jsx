@@ -112,7 +112,7 @@ export default function LoginForm() {
             to:
           </p>
           <ul className="list-disc list-inside text-gray-600 dark:text-gray-300 text-base md:text-lg space-y-2">
-            <li>📊 View past lecture transcripts</li>
+            <li>📊 View past lesson transcripts</li>
             <li>🤖 Interact with your lessons using AI Chatbot</li>
             <li>📈 Discover teaching insights and statistics</li>
           </ul>
