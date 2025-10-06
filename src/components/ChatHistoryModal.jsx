@@ -94,6 +94,7 @@ function InlineSummaryTable({ fileSummaries }) {
          // Find the row with the highest percent
          const maxPercent = Math.max(...tableData.map((row) => row.percent));
          const questionAnalysis = parseSection(summary, "QUESTION ANALYSIS:");
+         const speechAnalysis = parseSection(summary, "SPEECH ANALYSIS:");
          const keyInsights = parseSection(summary, "KEY INSIGHTS:");
          return (
            <div
@@ -137,6 +138,21 @@ function InlineSummaryTable({ fileSummaries }) {
                 </div>
                 <ul className="list-disc pl-5 text-xs">
                   {questionAnalysis.map((item, i) => (
+                    <li key={i}>
+                      <span className="font-medium">{item.key}:</span>{" "}
+                      {item.value}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {speechAnalysis.length > 0 && (
+              <div className="mb-2">
+                <div className="font-semibold text-blue-700 mb-1">
+                  Speech Analysis
+                </div>
+                <ul className="list-disc pl-5 text-xs">
+                  {speechAnalysis.map((item, i) => (
                     <li key={i}>
                       <span className="font-medium">{item.key}:</span>{" "}
                       {item.value}

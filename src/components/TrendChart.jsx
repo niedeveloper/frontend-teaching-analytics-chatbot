@@ -13,6 +13,8 @@ import {
   BarChart,
   Bar,
   Legend,
+  AreaChart,
+  Area,
 } from "recharts";
 
 // -----------------------------
@@ -139,12 +141,76 @@ export default function TrendChart({ lessonFilter = [] }) {
   const [loading, setLoading] = useState(true);
   const [displayMode, setDisplayMode] = useState("percent"); // percent | value
   const [selectedAreas, setSelectedAreas] = useState([...TEACHING_AREA_CODES]);
-  const [chartView, setChartView] = useState("line"); // line | groupedBar | total
+  const [chartView, setChartView] = useState("line"); // line | groupedBar | total | wpm
   const [lessonFilterState, setLessonFilter] = useState(lessonFilter);
+  const [wpmChartData, setWpmChartData] = useState([]);
 
   // ---------------------------------
   // Fetch
   // ---------------------------------
+  
+  // Fetch WPM chart data
+  const fetchWpmChartData = async (fileSummaries) => {
+    try {
+      const fileIds = fileSummaries.map((f) => f.file_id).filter(Boolean);
+      if (fileIds.length === 0) {
+        setWpmChartData([]);
+        return;
+      }
+
+      // Fetch chunks using the utility function (similar to GraphRenderer)
+      const { data: chunks, error: chunksError } = await supabase
+        .from("chunks")
+        .select("*")
+        .in("file_id", fileIds)
+        .order("sequence_order", { ascending: true });
+
+      if (chunksError || !chunks || chunks.length === 0) {
+        console.warn("WPM: no chunks found for file IDs", fileIds);
+        setWpmChartData([]);
+        return;
+      }
+
+      console.log("WPM: fetched chunks rows", chunks.length);
+
+      // Group by file and find max sequence across all lessons
+      const fileIdToSeqToWords = new Map();
+      let maxSeq = 0;
+      chunks.forEach((chunk) => {
+        const seq = Number(chunk.sequence_order) || 0;
+        maxSeq = Math.max(maxSeq, seq);
+        if (!fileIdToSeqToWords.has(chunk.file_id)) {
+          fileIdToSeqToWords.set(chunk.file_id, new Map());
+        }
+        // Use word_count and duration_seconds from the schema
+        const words = Number(chunk.word_count) || 0;
+        const durationSeconds = Number(chunk.duration_seconds) || 300;
+        const minutes = durationSeconds > 0 ? durationSeconds / 60 : 5;
+        const wpm = Math.round(words / minutes);
+        fileIdToSeqToWords.get(chunk.file_id).set(seq, wpm);
+      });
+
+      // Build chart rows where x = 5-min interval endpoint (5, 10, ...)
+      const lessons = fileSummaries.map((f, idx) => ({
+        id: f.file_id,
+        name: stripXlsx(f.stored_filename || `Lesson #${idx + 1}`),
+      }));
+
+      const rows = [];
+      for (let seq = 1; seq <= maxSeq; seq += 1) {
+        const entry = { interval: seq * 5 }; // minutes (nominal)
+        lessons.forEach(({ id, name }) => {
+          const wpm = fileIdToSeqToWords.get(id)?.get(seq) ?? 0;
+          entry[name] = wpm;
+        });
+        rows.push(entry);
+      }
+      setWpmChartData(rows);
+    } catch (error) {
+      console.error("Error fetching WPM chart data:", error);
+      setWpmChartData([]);
+    }
+  };
   useEffect(() => {
     async function fetchFileSummaries() {
       setLoading(true);
@@ -184,6 +250,12 @@ export default function TrendChart({ lessonFilter = [] }) {
       });
 
       setFileSummaries(filteredFiles);
+      
+      // Fetch WPM data if we have files
+      if (filteredFiles.length > 0) {
+        await fetchWpmChartData(filteredFiles);
+      }
+      
       setLoading(false);
     }
     fetchFileSummaries();
@@ -260,6 +332,31 @@ export default function TrendChart({ lessonFilter = [] }) {
     const avg = getAverageStats(allStats);
     return avg.map((a) => ({ code: a.name.split(" ")[0], percent: a.percent }));
   }, [allStats, displayMode]);
+
+  // WPM chart data with lesson filtering
+  const chartDataWpm = useMemo(() => {
+    if (wpmChartData.length === 0) return [];
+    
+    // Apply lesson filter to WPM data
+    const filteredLessons = lessonFilterState.length === 0 
+      ? filteredFileSummaries 
+      : filteredFileSummaries.filter(file => 
+          lessonFilterState.includes(stripXlsx(file.stored_filename))
+        );
+    
+    const filteredLessonNames = filteredLessons.map(file => stripXlsx(file.stored_filename || ''));
+    
+    // Filter WPM data to only include selected lessons
+    return wpmChartData.map(row => {
+      const filteredRow = { interval: row.interval };
+      filteredLessonNames.forEach(lessonName => {
+        if (row.hasOwnProperty(lessonName)) {
+          filteredRow[lessonName] = row[lessonName];
+        }
+      });
+      return filteredRow;
+    });
+  }, [wpmChartData, lessonFilterState, filteredFileSummaries]);
 
   // ---------------------------------
   // UI handlers
@@ -340,6 +437,7 @@ export default function TrendChart({ lessonFilter = [] }) {
             { key: "line", label: "Line (by Area across Lessons)" },
             { key: "groupedBar", label: "Grouped Bar (Areas × Lessons)" },
             { key: "total", label: "Total Distribution" },
+            { key: "wpm", label: "WPM Over Time" },
           ].map((opt) => (
             <button
               key={opt.key}
@@ -357,35 +455,37 @@ export default function TrendChart({ lessonFilter = [] }) {
         </div>
       </div>
 
-      {/* Toggle for percent/utterances */}
-      <div className="flex justify-center mb-4">
-        <div className="inline-flex items-center gap-4 bg-gray-100 px-4 py-2 rounded shadow text-base">
-          <label className="flex items-center cursor-pointer">
-            <input
-              type="radio"
-              name="displayMode"
-              value="percent"
-              checked={displayMode === "percent"}
-              onChange={() => setDisplayMode("percent")}
-              className="mr-1 accent-blue-600"
-            />
-            % of Utterances
-          </label>
-          <label className="flex items-center cursor-pointer">
-            <input
-              type="radio"
-              name="displayMode"
-              value="value"
-              checked={displayMode === "value"}
-              onChange={() => setDisplayMode("value")}
-              className="mr-1 accent-blue-600"
-            />
-            Number of Utterances
-          </label>
+      {/* Toggle for percent/utterances - hide for WPM chart */}
+      {chartView !== "wpm" && (
+        <div className="flex justify-center mb-4">
+          <div className="inline-flex items-center gap-4 bg-gray-100 px-4 py-2 rounded shadow text-base">
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="displayMode"
+                value="percent"
+                checked={displayMode === "percent"}
+                onChange={() => setDisplayMode("percent")}
+                className="mr-1 accent-blue-600"
+              />
+              % of Utterances
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="displayMode"
+                value="value"
+                checked={displayMode === "value"}
+                onChange={() => setDisplayMode("value")}
+                className="mr-1 accent-blue-600"
+              />
+              Number of Utterances
+            </label>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Area toggles (only for line view) */}
+      {/* Area toggles (only for line view, not for WPM) */}
       {chartView === "line" && (
         <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
           <button
@@ -503,6 +603,43 @@ export default function TrendChart({ lessonFilter = [] }) {
               })}
             </BarChart>
           </ResponsiveContainer>
+        ) : chartView === "wpm" ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart
+              data={chartDataWpm}
+              margin={{ top: 20, right: 120, left: 60, bottom: 40 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="interval"
+                tick={{ fontSize: 12, fontWeight: 600, dy: 16 }}
+                height={60}
+                interval={0}
+                label={{ value: "5-Min Interval (min)", position: "insideBottom", dy: 25 }}
+              />
+              <YAxis 
+                tickFormatter={(val) => `${val}`}
+                label={{ value: "Average Words Per Minute", angle: -90, position: "insideLeft", dy: 80 }}
+              />
+              <Tooltip />
+              <Legend verticalAlign="top" align="center" />
+              {chartDataWpm.length > 0 && Object.keys(chartDataWpm[0]).filter(key => key !== 'interval').map((lesson, idx) => (
+                <Area 
+                  key={lesson} 
+                  type="monotone" 
+                  dataKey={lesson} 
+                  name={lesson} 
+                  stroke={LINE_COLORS[idx % LINE_COLORS.length]} 
+                  fill={LINE_COLORS[idx % LINE_COLORS.length]} 
+                  fillOpacity={0.15} 
+                  strokeWidth={3} 
+                  dot={{ r: 3 }} 
+                  activeDot={{ r: 5 }} 
+                  stackId="1" 
+                />
+              ))}
+            </AreaChart>
+          </ResponsiveContainer>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
@@ -534,23 +671,25 @@ export default function TrendChart({ lessonFilter = [] }) {
         )}
       </div>
 
-      {/* Legend block */}
-      <div className="w-full mt-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-          {TEACHING_AREA_CODES.map((code, idx) => (
-            <div key={code} className="flex items-center gap-2 text-sm">
-              <span
-                className="inline-block w-4 h-4 rounded"
-                style={{ background: LINE_COLORS[idx % LINE_COLORS.length] }}
-              />
-              <span>
-                <strong>{code.split(" ")[0]}:</strong>{" "}
-                {code.substring(code.indexOf(" ") + 1)}
-              </span>
-            </div>
-          ))}
+      {/* Legend block - hide for WPM chart */}
+      {chartView !== "wpm" && (
+        <div className="w-full mt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            {TEACHING_AREA_CODES.map((code, idx) => (
+              <div key={code} className="flex items-center gap-2 text-sm">
+                <span
+                  className="inline-block w-4 h-4 rounded"
+                  style={{ background: LINE_COLORS[idx % LINE_COLORS.length] }}
+                />
+                <span>
+                  <strong>{code.split(" ")[0]}:</strong>{" "}
+                  {code.substring(code.indexOf(" ") + 1)}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }
