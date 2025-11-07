@@ -638,13 +638,27 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       }
       setBotLoading(false);
     } catch (err) {
-      console.error(err);
+      console.error('[Chatbot] Error:', err);
+      
+      // Provide more helpful error messages to users
+      let errorMessage = "I'm having trouble connecting to the server. ";
+      
+      if (err.message.includes('Failed to connect') || err.message.includes('attempts')) {
+        errorMessage += "This might be due to a temporary network issue. Please check your internet connection and try again.";
+      } else if (err.message.includes('Server error')) {
+        errorMessage += "The server encountered an error. Please try again in a moment.";
+      } else if (err.message.includes('timeout') || err.message.includes('aborted')) {
+        errorMessage += "The request took too long to complete. Please try again.";
+      } else {
+        errorMessage += "Please try again. If the problem persists, please contact support.";
+      }
+      
       setMessages((prev) => [
         ...prev,
         {
           id: messages.length + (summaryMessage ? 3 : 2),
           role: "assistant",
-          content: "Error contacting backend.",
+          content: errorMessage,
           timestamp: new Date(),
         },
       ]);
