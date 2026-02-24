@@ -9,9 +9,7 @@ import { useUser } from "../context/UserContext";
 import React from "react";
 import { Send, ArrowUp, ArrowDown } from "lucide-react";
 
-// Inline summary table component for chat
 function InlineSummaryTable({ fileSummaries }) {
-  // Reuse Modal's parsing logic
   const TEACHING_AREA_CODES = [
     "1.1 Establishing Interaction and rapport",
     "1.2 Setting and Maintaining Rules and Routine",
@@ -58,7 +56,6 @@ function InlineSummaryTable({ fileSummaries }) {
       questions: statsObj[code]?.questions || 0,
     }));
   }
-  // Parse QUESTION ANALYSIS section
   function parseSection(summary, sectionHeader) {
     const lines = summary.split("\n");
     const sectionLines = [];
@@ -73,7 +70,6 @@ function InlineSummaryTable({ fileSummaries }) {
         sectionLines.push(line.trim());
       }
     }
-    // Parse lines like '- Key: Value' into { key, value }
     return sectionLines
       .map((line) => {
         const match = line.match(/^-\s*([^:]+):\s*(.+)$/);
@@ -84,14 +80,12 @@ function InlineSummaryTable({ fileSummaries }) {
       })
       .filter(Boolean);
   }
-  // Render a table for each file
   return (
     <div className="flex flex-row gap-6 overflow-x-auto pb-2">
       {fileSummaries.map((file, idx) => {
         const summary = (file.data_summary || "").replace(/\\n/g, "\n");
         const stats = parseTeachingAreaStats(summary);
         const tableData = statsToTable(stats);
-        // Find the row with the highest percent
         const maxPercent = Math.max(...tableData.map((row) => row.percent));
         const questionAnalysis = parseSection(summary, "QUESTION ANALYSIS:");
         const speechAnalysis = parseSection(summary, "SPEECH ANALYSIS:");
@@ -183,22 +177,15 @@ function InlineSummaryTable({ fileSummaries }) {
   );
 }
 
-// Helper to detect summary requests
 function isSummaryRequest(text) {
   return /summary|summarize|data overview|lesson overview/i.test(text);
 }
 
-// Helper to generate unique IDs for messages
-function uniqueId() {
-  return Date.now() + Math.random();
-}
-
 export default function Chatbot({ fileIds: initialFileIds }) {
-  // Memoize empty arrays to prevent unnecessary re-renders
   const emptyArray = useMemo(() => [], []);
   const emptyLessonFilter = useMemo(() => [], []);
   const emptyAreaFilter = useMemo(() => [], []);
-  
+
   const [fileNames, setFileNames] = useState(emptyArray);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState(emptyArray);
@@ -213,14 +200,12 @@ export default function Chatbot({ fileIds: initialFileIds }) {
   const [isResuming, setIsResuming] = useState(false);
   const [resumedSessionId, setResumedSessionId] = useState(null);
   const [fileIds, setFileIds] = useState(initialFileIds || emptyArray);
-  
-  // Session info
+
   const [sessionId] = useState(() =>
     crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
   );
   const [startedAt] = useState(() => new Date().toISOString());
 
-  // Resume conversation function
   const resumeConversation = async (sessionId) => {
     try {
       setLoading(true);
@@ -238,17 +223,14 @@ export default function Chatbot({ fileIds: initialFileIds }) {
         throw new Error("Failed to load conversation");
       }
 
-      // Set conversation state
       setFileIds(session.file_ids || emptyArray);
-      // For now, just show file IDs since we don't have file names
       setFileNames(session.file_ids?.map(id => `File ${id}`) || emptyArray);
       setMessages(session.conversation || emptyArray);
       setResumedSessionId(sessionId);
       setIsResuming(true);
 
-      // Update URL to show resuming
       router.replace(`/chatbot?session=${sessionId}&resume=true`);
-      
+
     } catch (err) {
       console.error("Failed to resume conversation:", err);
       alert("Failed to load conversation. Please try again.");
@@ -259,35 +241,22 @@ export default function Chatbot({ fileIds: initialFileIds }) {
 
   const [fileSummaries, setFileSummaries] = useState(emptyArray);
 
-  // Ref to always have the latest messages
   const messagesRef = useRef(messages);
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
-  // Handler to save session and navigate
   const handleBackToDashboard = async () => {
-    console.log("handleBackToDashboard called");
-    console.log("messages:", messages);
-    console.log("user:", user);
-    console.log("fileIds:", fileIds);
-    console.log("isResuming:", isResuming);
-    console.log("resumedSessionId:", resumedSessionId);
-    
     const hasUserMessage = messages.some((msg) => msg.role === "user");
-    console.log("hasUserMessage:", hasUserMessage);
-    
+
     if (!hasUserMessage || !user?.email) {
-      console.log("Early return - no user message or no user email");
       router.push("/dashboard");
       return;
     }
-    
-    // If resuming, update the existing session instead of creating new one
+
     if (isResuming && resumedSessionId) {
       const endedAt = new Date().toISOString();
-      
-      // Transform messages to database format with proper structure and metadata
+
       const conversationForStorage = messages.map((msg) => {
         const baseMessage = {
           id: msg.id,
@@ -295,8 +264,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
           content: msg.content,
           timestamp: msg.timestamp ? msg.timestamp.toISOString() : new Date().toISOString(),
         };
-        
-        // Add type-specific metadata
+
         if (msg.type === "summary-table") {
           baseMessage.message_type = "summary_table";
           baseMessage.fileSummaries = msg.fileSummaries;
@@ -309,14 +277,10 @@ export default function Chatbot({ fileIds: initialFileIds }) {
         } else {
           baseMessage.message_type = "text";
         }
-        
+
         return baseMessage;
       });
 
-      // Update existing session
-      console.log("Updating existing session:", resumedSessionId);
-      console.log("Conversation data:", conversationForStorage);
-      
       const { error: updateError } = await supabase
         .from("chatbot_sessions")
         .update({
@@ -324,17 +288,14 @@ export default function Chatbot({ fileIds: initialFileIds }) {
           ended_at: endedAt,
         })
         .eq("session_id", resumedSessionId);
-      
+
       if (updateError) {
         console.error("Failed to update chat session:", updateError);
-      } else {
-        console.log("Successfully updated existing session");
       }
       router.push("/dashboard");
       return;
     }
-    
-    // Create new session (original logic)
+
     const endedAt = new Date().toISOString();
     const { data, error } = await supabase
       .from("users")
@@ -348,7 +309,6 @@ export default function Chatbot({ fileIds: initialFileIds }) {
     }
     const user_id = data.user_id;
 
-    // Transform messages to database format with proper structure and metadata
     const conversationForStorage = messages.map((msg) => {
       const baseMessage = {
         id: msg.id,
@@ -356,8 +316,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
         content: msg.content,
         timestamp: msg.timestamp ? msg.timestamp.toISOString() : new Date().toISOString(),
       };
-      
-      // Add type-specific metadata
+
       if (msg.type === "summary-table") {
         baseMessage.message_type = "summary_table";
         baseMessage.fileSummaries = msg.fileSummaries;
@@ -370,20 +329,10 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       } else {
         baseMessage.message_type = "text";
       }
-      
+
       return baseMessage;
     });
 
-    console.log("Creating new session");
-    console.log("Session data:", {
-      session_id: sessionId,
-      user_id,
-      file_ids: fileIds,
-      conversation: conversationForStorage,
-      started_at: startedAt,
-      ended_at: endedAt,
-    });
-    
     const { error: insertError } = await supabase
       .from("chatbot_sessions")
       .insert([
@@ -398,19 +347,16 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       ]);
     if (insertError) {
       console.error("Failed to save chat session:", insertError);
-    } else {
-      console.log("Successfully created new session");
     }
     router.push("/dashboard");
   };
 
   useEffect(() => {
     async function fetchFileNames() {
-      // Check if we're resuming a conversation
       const urlParams = new URLSearchParams(window.location.search);
       const resumeSessionId = urlParams.get('session');
       const isResuming = urlParams.get('resume') === 'true';
-      
+
       if (resumeSessionId && isResuming) {
         await resumeConversation(resumeSessionId);
         return;
@@ -429,15 +375,12 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       if (error) {
         setFileNames(emptyArray);
       } else {
-        // Sort files by lesson_date and lesson_number for consistent ordering
         const sortedData = (data || []).sort((a, b) => {
-          // First sort by lesson_date
           const dateA = new Date(a.lesson_date || 0);
           const dateB = new Date(b.lesson_date || 0);
           if (dateA.getTime() !== dateB.getTime()) {
             return dateA.getTime() - dateB.getTime();
           }
-          // Then by lesson_number
           return (a.lesson_number || 0) - (b.lesson_number || 0);
         });
         setFileNames(sortedData.map((f) => f.stored_filename));
@@ -453,7 +396,6 @@ export default function Chatbot({ fileIds: initialFileIds }) {
     }
   }, [messages]);
 
-  // Memoize the initial welcome message to prevent recreation
   const initialMessage = useMemo(() => ({
     id: 1,
     role: "assistant",
@@ -473,7 +415,6 @@ export default function Chatbot({ fileIds: initialFileIds }) {
     if (!input.trim()) return;
     let summaryMessage = null;
     if (isSummaryRequest(input)) {
-      // Fetch and display summary table before chatbot response
       const fileSummaries = await fetchLessonSummaries(fileIds);
       summaryMessage = {
         id: messages.length + 1,
@@ -507,7 +448,6 @@ export default function Chatbot({ fileIds: initialFileIds }) {
     setBotLoading(true);
 
     try {
-      // Only include user/assistant messages with string content in history
       const conversationHistory = messages
         .filter(
           (msg) =>
@@ -533,40 +473,33 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       let botMessageId = messages.length + (summaryMessage ? 3 : 2);
       let assistantMessageAdded = false;
       const decoder = new TextDecoder();
-      
-      // Track if we've received graph codes for this message
+
       let graphTypesReceived = [];
-      
+
       while (!done) {
         const { value, done: streamDone } = await reader.read();
         done = streamDone;
         if (value) {
           const chunk = decoder.decode(value, { stream: true });
-          
-          // Check if this chunk contains a graph signal
+
           if (chunk.includes('"type": "graph_code"')) {
-            console.log('DEBUG: Found graph_code chunk:', chunk);
             try {
-              // Parse the chunk - handle multiple graph codes per chunk
               const graphDataMatches = chunk.matchAll(/data:\s*({[^}]+})/g);
               let processedGraphs = false;
-              
+
               for (const match of graphDataMatches) {
                 try {
                   const graphData = JSON.parse(match[1]);
-                  
-                  // Check if we have valid graph data
+
                   if (graphData && graphData.type === "graph_code") {
                     const graphType = graphData.code.replace('GRAPH:', '');
                     const graphReason = graphData.reason;
                     const lessonFilter = graphData.lesson_filter || emptyLessonFilter;
                     const areaFilter = graphData.area_filter || emptyAreaFilter;
-                    
-                    // Check if we've already received this graph type to avoid duplicates
+
                     if (!graphTypesReceived.includes(graphType)) {
                       graphTypesReceived.push(graphType);
-                      
-                      // Create a separate graph message for each graph type
+
                       const graphMessageId = botMessageId + (graphTypesReceived.length * 0.1);
                       setMessages(prev => [
                         ...prev,
@@ -581,68 +514,57 @@ export default function Chatbot({ fileIds: initialFileIds }) {
                           timestamp: new Date(),
                         }
                       ]);
-                      
-                      console.log('Graph message created:', graphType, graphReason, 'Lesson Filter:', lessonFilter, 'Area Filter:', areaFilter);
-                      console.log('DEBUG: graphTypesReceived array:', graphTypesReceived);
                     }
-                    
+
                     processedGraphs = true;
                   }
                 } catch (parseError) {
                   console.warn('Failed to parse JSON from data chunk:', parseError);
-                  // Continue processing other matches
                 }
               }
-              
-              // If we processed any graphs, skip adding this chunk to text
+
               if (processedGraphs) {
                 continue;
               } else {
-                // No valid graphs found, add to text
                 botText += chunk;
               }
             } catch (e) {
-              // If graph parsing fails, just add the chunk as text
               console.warn('Failed to parse graph data:', e);
               botText += chunk;
             }
           } else {
-            // No graph code, just add the chunk as text
             botText += chunk;
           }
-          
-                     // Process newlines in the final text content
-           const processedText = botText.replace(/\\n/g, '\n');
-           
-           // Update message content
-           if (!assistantMessageAdded) {
-             setMessages((prev) => [
-               ...prev,
-               {
-                 id: botMessageId,
-                 role: "assistant",
-                 content: processedText,
-                 timestamp: new Date(),
-               },
-             ]);
-             assistantMessageAdded = true;
-             setBotLoading(false);
-           } else {
-             setMessages((prev) =>
-               prev.map((msg) =>
-                 msg.id === botMessageId ? { ...msg, content: processedText } : msg
-               )
-             );
-           }
+
+          const processedText = botText.replace(/\\n/g, '\n');
+
+          if (!assistantMessageAdded) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: botMessageId,
+                role: "assistant",
+                content: processedText,
+                timestamp: new Date(),
+              },
+            ]);
+            assistantMessageAdded = true;
+            setBotLoading(false);
+          } else {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === botMessageId ? { ...msg, content: processedText } : msg
+              )
+            );
+          }
         }
       }
       setBotLoading(false);
     } catch (err) {
       console.error('[Chatbot] Error:', err);
-      
-      // Provide more helpful error messages to users
+
       let errorMessage = "I'm having trouble connecting to the server. ";
-      
+
       if (err.message.includes('Failed to connect') || err.message.includes('attempts')) {
         errorMessage += "This might be due to a temporary network issue. Please check your internet connection and try again.";
       } else if (err.message.includes('Server error')) {
@@ -652,7 +574,7 @@ export default function Chatbot({ fileIds: initialFileIds }) {
       } else {
         errorMessage += "Please try again. If the problem persists, please contact support.";
       }
-      
+
       setMessages((prev) => [
         ...prev,
         {
@@ -688,7 +610,6 @@ export default function Chatbot({ fileIds: initialFileIds }) {
     if (!error && data) setFileSummaries(data);
   };
 
-  // Call this when opening the modal:
   const handleOpenModal = async () => {
     const fileSummaries = await fetchLessonSummaries(fileIds);
     setFileSummaries(fileSummaries || emptyArray);
@@ -696,9 +617,6 @@ export default function Chatbot({ fileIds: initialFileIds }) {
     setShowModal(true);
   };
 
-  //Back to top button:
-
-  // scroll handler
   useEffect(() => {
     function handleScroll() {
       const scrollY = window.scrollY;
@@ -811,21 +729,21 @@ export default function Chatbot({ fileIds: initialFileIds }) {
 
       <div className="flex-1 overflow-auto p-4 bg-white">
         {messages.map((msg) => (
-                     <div
-             key={msg.id}
-             className={`mb-3 flex ${
-               msg.role === "user" ? "justify-end" : "justify-start"
-             } ${msg.type === "graph" ? "justify-center" : ""}`}
-           >
-                         <div
-               className={`rounded-2xl shadow px-4 py-2 ${
-                 msg.role === "user"
-                   ? "bg-blue-600 text-white max-w-[70%]"
-                   : msg.type === "graph"
-                   ? "bg-gray-100 text-gray-800 w-[1400px]"
-                   : "bg-gray-100 text-gray-800 max-w-[70%]"
-               }`}
-             >
+          <div
+            key={msg.id}
+            className={`mb-3 flex ${
+              msg.role === "user" ? "justify-end" : "justify-start"
+            } ${msg.type === "graph" ? "justify-center" : ""}`}
+          >
+            <div
+              className={`rounded-2xl shadow px-4 py-2 ${
+                msg.role === "user"
+                  ? "bg-blue-600 text-white max-w-[70%]"
+                  : msg.type === "graph"
+                  ? "bg-gray-100 text-gray-800 w-[1400px]"
+                  : "bg-gray-100 text-gray-800 max-w-[70%]"
+              }`}
+            >
               <div>
                 {msg.type === "summary-table" ? (
                   <InlineSummaryTable fileSummaries={msg.fileSummaries} />
@@ -834,8 +752,8 @@ export default function Chatbot({ fileIds: initialFileIds }) {
                     <div className="text-sm text-blue-600 mb-2 italic">
                       💡 {msg.graphReason}
                     </div>
-                    <GraphRenderer 
-                      graphType={msg.graphType} 
+                    <GraphRenderer
+                      graphType={msg.graphType}
                       fileIds={fileIds}
                       messageId={msg.id}
                       lessonFilter={msg.lessonFilter || emptyLessonFilter}
@@ -929,13 +847,11 @@ export default function Chatbot({ fileIds: initialFileIds }) {
           </small>
         </div>
       </div>
-      {/* Place Modal here, outside of other divs */}
       <Modal
         open={showModal}
         onClose={() => setShowModal(false)}
         fileSummaries={fileSummaries}
       />
-      {/* Floating Scroll Buttons */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50">
         {showScrollTop && (
           <button

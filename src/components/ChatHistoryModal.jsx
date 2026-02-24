@@ -5,9 +5,7 @@ import GraphRenderer from "./GraphRenderer";
 import jsPDF from "jspdf";
 import { toPng } from "html-to-image";
 
-// Inline summary table component for chat (copied from Chatbot.jsx)
 function InlineSummaryTable({ fileSummaries }) {
-  // Reuse Modal's parsing logic
   const TEACHING_AREA_CODES = [
     "1.1 Establishing Interaction and rapport",
     "1.2 Setting and Maintaining Rules and Routine",
@@ -57,7 +55,6 @@ function InlineSummaryTable({ fileSummaries }) {
     }));
   }
   
-  // Parse QUESTION ANALYSIS section
   function parseSection(summary, sectionHeader) {
     const lines = summary.split("\n");
     const sectionLines = [];
@@ -72,7 +69,6 @@ function InlineSummaryTable({ fileSummaries }) {
         sectionLines.push(line.trim());
       }
     }
-    // Parse lines like '- Key: Value' into { key, value }
     return sectionLines
       .map((line) => {
         const match = line.match(/^-\s*([^:]+):\s*(.+)$/);
@@ -84,14 +80,12 @@ function InlineSummaryTable({ fileSummaries }) {
       .filter(Boolean);
   }
   
-     // Render a table for each file
-   return (
+  return (
      <div className="flex flex-col gap-4 pb-2">
        {fileSummaries.map((file, idx) => {
          const summary = (file.data_summary || "").replace(/\\n/g, "\n");
          const stats = parseTeachingAreaStats(summary);
          const tableData = statsToTable(stats);
-         // Find the row with the highest percent
          const maxPercent = Math.max(...tableData.map((row) => row.percent));
          const questionAnalysis = parseSection(summary, "QUESTION ANALYSIS:");
          const speechAnalysis = parseSection(summary, "SPEECH ANALYSIS:");
@@ -190,20 +184,16 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
   const [capturingCharts, setCapturingCharts] = useState(false);
   const chatContentRef = useRef();
 
-  // Memoized empty arrays for filter fallbacks (matching live chat behavior)
   const emptyLessonFilter = useMemo(() => [], []);
   const emptyAreaFilter = useMemo(() => [], []);
 
-  // Initialize all messages as selected when modal opens
   useEffect(() => {
     if (open && chatSession?.conversation) {
       setSelectedMessages(new Set(chatSession.conversation.map((_, index) => index)));
-      // Capture charts when modal opens
       captureCharts();
     }
   }, [open, chatSession]);
 
-  // Capture charts as images for PDF generation
   const captureCharts = async () => {
     if (!chatSession?.conversation) return;
     
@@ -211,22 +201,18 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
     const images = {};
     
     try {
-      // Wait a bit for charts to fully render
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       for (let i = 0; i < chatSession.conversation.length; i++) {
         const msg = chatSession.conversation[i];
         if (msg.message_type === "graph") {
-          // Find the chart DOM element by message index
           const chartElement = document.querySelector(`[data-message-id="${i}"] .chart-container`);
           if (chartElement) {
             try {
-              // Use the same method as GraphRenderer - html-to-image with toPng
               const dataUrl = await toPng(chartElement, {
                 backgroundColor: "white",
                 cacheBust: true,
                 style: {
-                  // Override any problematic CSS properties
                   color: '#000000',
                   backgroundColor: '#ffffff'
                 }
@@ -234,7 +220,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
               images[i] = dataUrl;
             } catch (error) {
               console.warn(`Failed to capture chart for message ${i}:`, error);
-              // Store a fallback indicator
               images[i] = 'capture_failed';
             }
           }
@@ -285,7 +270,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
     const handleDownload = async () => {
     if (!chatSession.conversation) return;
     
-    // If no messages are selected, select all
     const messagesToDownload = selectedMessages.size > 0 
       ? chatSession.conversation.filter((_, index) => selectedMessages.has(index))
       : chatSession.conversation;
@@ -297,10 +281,7 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
     
     setDownloading(true);
     try {
-      // Create a print-friendly version of the chat
       const printWindow = window.open('', '_blank');
-      
-      // Create the HTML content for printing with proper markdown rendering
       const printContent = `
         <!DOCTYPE html>
         <html>
@@ -628,17 +609,14 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
             
             let content = '';
             if (msg.message_type === "summary_table") {
-              // Generate HTML for summary tables
               const fileSummaries = msg.fileSummaries || [];
               let summaryTableHTML = '';
-              
+
               if (fileSummaries.length > 0) {
-                                 summaryTableHTML = `
-                   <div class="summary-tables-container" style="display: flex; flex-direction: column; gap: 20px; margin: 15px 0;">
+                summaryTableHTML = `
+                  <div class="summary-tables-container" style="display: flex; flex-direction: column; gap: 20px; margin: 15px 0;">
                     ${fileSummaries.map((file, idx) => {
                       const summary = (file.data_summary || "").replace(/\\n/g, "\n");
-                      
-                      // Parse teaching area statistics
                       const lines = summary.split("\n");
                       const stats = {};
                       let inStats = false;
@@ -662,7 +640,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
                         }
                       }
                       
-                      // Parse question analysis and key insights
                       const questionAnalysis = [];
                       const keyInsights = [];
                       let inQuestionAnalysis = false;
@@ -689,8 +666,7 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
                           }
                         }
                       }
-                      
-                      // Generate table data
+
                       const TEACHING_AREA_CODES = [
                         "1.1 Establishing Interaction and rapport",
                         "1.2 Setting and Maintaining Rules and Routine",
@@ -775,7 +751,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
               
               content = summaryTableHTML;
             } else if (msg.message_type === "graph") {
-              // Display the captured chart image if available
               const chartImage = chartImages[chatSession.conversation.indexOf(msg)];
               if (chartImage && chartImage !== 'capture_failed') {
                 content = `
@@ -788,7 +763,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
                   </div>
                 `;
               } else if (chartImage === 'capture_failed') {
-                // Show a message when capture specifically failed
                 content = `
                   <div class="special-content">
                     <div class="icon">⚠️</div>
@@ -803,7 +777,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
                   </div>
                 `;
               } else {
-                // Fallback if image capture hasn't completed yet
                 content = `
                   <div class="special-content">
                     <div class="icon">📈</div>
@@ -817,29 +790,18 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
                 `;
               }
             } else {
-              // Convert markdown to HTML for text messages
               const markdownContent = msg.content || '';
               const htmlContent = markdownContent
-                // Handle bold text (**text**)
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                // Handle italic text (*text*)
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                // Handle inline code (`text`)
                 .replace(/`(.*?)`/g, '<code>$1</code>')
-                // Handle newlines
                 .replace(/\n/g, '<br>')
-                // Handle numbered lists with bold headers (1. **Header**:)
                 .replace(/^(\d+\.\s+\*\*.*?\*\*:)/gm, '<h3 style="color: #1e40af; margin-top: 20px; margin-bottom: 10px;">$1</h3>')
-                // Handle numbered lists (1. Item:)
                 .replace(/^(\d+\.\s+[^:]+:)/gm, '<h4 style="color: #374151; margin-top: 15px; margin-bottom: 8px;">$1</h4>')
-                // Handle specific bold labels
                 .replace(/^\*\*(Trend)\*\*:/gm, '<strong style="color: #059669;">$1:</strong>')
                 .replace(/^\*\*(Overall Insight)\*\*:/gm, '<strong style="color: #dc2626;">$1:</strong>')
-                // Handle bullet points
                 .replace(/^-\s+(.*?):/gm, '<div style="margin: 8px 0; padding-left: 20px;"><strong>$1:</strong></div>')
-                // Handle lesson entries (Lesson 1: X, Lesson 2: Y, Lesson 3: Z)
                 .replace(/(Lesson \d+): (\d+) utterances/g, '<span style="color: #059669;"><strong>$1:</strong> $2 utterances</span>')
-                // Handle trend descriptions
                 .replace(/(\*\*Trend\*\*: .*?)(?=<br>|$)/g, '<div style="background: #f0f9ff; padding: 8px 12px; border-radius: 6px; border-left: 3px solid #0ea5e9; margin: 8px 0;">$1</div>');
               
               content = `<div class="content markdown-content">${htmlContent}</div>`;
@@ -868,8 +830,7 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
       
       printWindow.document.write(printContent);
       printWindow.document.close();
-      
-      // Wait for content to load, then trigger print
+
       printWindow.onload = () => {
         setTimeout(() => {
           printWindow.print();
@@ -888,7 +849,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-white/40 px-2 py-4">
       <div className="bg-white rounded-xl shadow-xl p-4 sm:p-8 max-w-6xl w-full relative mx-auto overflow-y-auto max-h-[95vh]">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-gray-800">Chat History</h2>
@@ -904,7 +864,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
           </button>
         </div>
 
-        {/* Download Controls */}
         <div className="bg-gray-50 rounded-lg p-4 mb-6">
           <div className="flex items-center gap-4 mb-3">
             <button
@@ -939,7 +898,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
           </div>
         </div>
 
-        {/* Chat Messages */}
         <div className="space-y-4" ref={chatContentRef}>
           {chatSession.conversation?.map((msg, index) => (
             <div
@@ -949,7 +907,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
                 msg.role === "user" ? "justify-end" : "justify-start"
               } ${msg.message_type === "graph" ? "justify-center" : ""}`}
             >
-              {/* Radio Button for Selection */}
               <div className="flex-shrink-0 mt-2">
                 <input
                   type="checkbox"
@@ -959,7 +916,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
                 />
               </div>
               
-              {/* Message Content */}
               <div
                 className={`rounded-2xl shadow px-4 py-2 ${
                   msg.role === "user"
@@ -1005,7 +961,6 @@ export default function ChatHistoryModal({ open, onClose, chatSession, fileSumma
           ))}
         </div>
 
-        {/* Session Info Footer */}
         <div className="mt-8 pt-6 border-t border-gray-200">
           <div className="text-sm text-gray-600">
             <p><strong>Session ID:</strong> {chatSession.session_id}</p>

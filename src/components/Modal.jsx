@@ -17,7 +17,6 @@ import { toPng } from "html-to-image";
 import { useRef, useState, useEffect } from "react";
 import { fetchChunksByFileIds } from "../lib/api";
 
-// Teaching area codes in order (expandable)
 const TEACHING_AREA_CODES = [
   "1.1 Establishing Interaction and rapport",
   "1.2 Setting and Maintaining Rules and Routine",
@@ -29,19 +28,17 @@ const TEACHING_AREA_CODES = [
   "4.1 Checking for understanding and providing feedback",
 ];
 
-// Define a color palette for lines
 const LINE_COLORS = [
-  "#22c55e", // green
-  "#2563eb", // blue
-  "#f59e42", // orange
-  "#e11d48", // red
-  "#a21caf", // purple
-  "#0ea5e9", // sky
-  "#facc15", // yellow
-  "#64748b", // slate
+  "#22c55e",
+  "#2563eb",
+  "#f59e42",
+  "#e11d48",
+  "#a21caf",
+  "#0ea5e9",
+  "#facc15",
+  "#64748b",
 ];
 
-// Parse one file's teaching area stats
 function parseTeachingAreaStats(summary) {
   const lines = summary.split("\n");
   const stats = {};
@@ -65,14 +62,12 @@ function parseTeachingAreaStats(summary) {
       }
     }
   }
-  // Fill missing areas as 0 for uniformity
   TEACHING_AREA_CODES.forEach((code) => {
     if (!stats[code]) stats[code] = { value: 0, percent: 0 };
   });
   return stats;
 }
 
-// Convert stats to recharts bar data format
 function statsToChartData(statsObj) {
   return TEACHING_AREA_CODES.map((code) => ({
     name: code,
@@ -82,7 +77,6 @@ function statsToChartData(statsObj) {
   }));
 }
 
-// Calculate average % per area across all files
 function getAverageStats(allStats) {
   const avg = TEACHING_AREA_CODES.map((code) => {
     const total = allStats.reduce(
@@ -110,8 +104,6 @@ function computeMovingAverage(values, windowSize) {
 }
 
 export default function Modal({ open, onClose, fileSummaries = [] }) {
-  // All hooks must be called before any return
-  // Refs for visible charts
   const groupedBarRef = useRef();
   const totalDistRef = useRef();
   const lineChartRef = useRef();
@@ -132,33 +124,22 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
   }, [open, fileSummaries]);
   if (!open) return null;
 
-  // Parse all summaries to aligned stats objects
   const allStats = fileSummaries.map((f) =>
     parseTeachingAreaStats((f.data_summary || "").replace(/\n/g, "\n"))
   );
   const chartDatas = allStats.map(statsToChartData);
   const averageStats = getAverageStats(allStats);
 
-  // Prepare data for grouped bar chart
-  // Helper to strip .xlsx from lesson names
   function stripXlsx(filename) {
     return filename.replace(/\.xlsx$/i, "");
   }
 
-  // Parse lesson name to create short labels for x-axis (from TrendChart.jsx)
   function parseLessonLabel(filename) {
     if (!filename) return "Unknown";
-    
-    // Remove .xlsx extension if present
     const cleanName = stripXlsx(filename);
-    
-    // Pattern: Subject_LessonNumber_Date or Subject_LessonNumber-Date
     const match = cleanName.match(/^([^_]+)_Lesson(\d+)[_-](\d{2}-\d{2}-\d{4})/i);
-    
     if (match) {
       const [, subject, lessonNum] = match;
-      
-      // Shorten subject names
       const subjectMap = {
         'Mathematics': 'Math',
         'English': 'Eng',
@@ -168,20 +149,16 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
         'History': 'Hist',
         'Chemistry': 'Chem'
       };
-      
       const shortSubject = subjectMap[subject] || subject.substring(0, 4);
       return `${shortSubject}_L${lessonNum}`;
     }
-    
-    // Fallback: try to extract lesson number from any pattern
     const lessonMatch = cleanName.match(/Lesson(\d+)/i);
     if (lessonMatch) {
       return `L${lessonMatch[1]}`;
     }
-    
-    // Final fallback: use first 8 characters
     return cleanName.substring(0, 8);
   }
+
   const lessonNames = fileSummaries.map((file, idx) => stripXlsx(file.stored_filename || `Lesson #${idx + 1}`));
   const groupedBarData = TEACHING_AREA_CODES.map((code) => {
     const entry = { code: code.split(" ")[0] };
@@ -200,7 +177,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
   const groupedBarTrend = computeMovingAverage(groupedBarAgg.map((r) => r.__agg), 3);
   const groupedBarDataWithTrend = groupedBarAgg.map((r, i) => ({ ...r, __trend: groupedBarTrend[i] }));
 
-  // Total Distribution data refactor (precompute)
   const totalDistDataBase = TEACHING_AREA_CODES.map((code, idx) => {
     if (displayMode === 'value') {
       let total = 0;
@@ -210,7 +186,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
       });
       return { code: code.split(" ")[0], y: total };
     } else {
-      // average percent across lessons for this area
       const percents = fileSummaries.map((file) => {
         const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
         return stats[code]?.percent || 0;
@@ -222,14 +197,12 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
   const totalDistTrend = computeMovingAverage(totalDistDataBase.map((d) => d.y), 3);
   const totalDistData = totalDistDataBase.map((d, i) => ({ ...d, __trend: totalDistTrend[i] }));
 
-  // Line chart (Utterances per Teaching Area Across Lessons) data precompute with aggregated trend
   const lineChartData = fileSummaries.map((file, idx) => {
     const stats = parseTeachingAreaStats((file.data_summary || "").replace(/\n/g, "\n"));
     const entry = { lesson: parseLessonLabel(file.stored_filename || `Lesson #${idx + 1}`) };
     TEACHING_AREA_CODES.forEach((code) => {
       entry[code] = displayMode === 'percent' ? (stats[code]?.percent || 0) : (stats[code]?.value || 0);
     });
-    // aggregate across all areas (or selected areas)
     const areaValues = TEACHING_AREA_CODES.map((code) => Number(entry[code]) || 0);
     entry.__agg = areaValues.length ? areaValues.reduce((s, v) => s + v, 0) / areaValues.length : 0;
     return entry;
@@ -237,7 +210,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
   const lineTrend = computeMovingAverage(lineChartData.map((d) => d.__agg), 1);
   const lineChartDataWithTrend = lineChartData.map((d, i) => ({ ...d, __trend: lineTrend[i] }));
 
-  // WPM trend (average across lessons per interval, then moving average)
   const wpmDataWithTrend = wpmChartData.map((row) => {
     const values = lessonNames.map((ln) => Number(row[ln]) || 0);
     const avg = values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
@@ -246,7 +218,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
   const wpmTrend = computeMovingAverage(wpmDataWithTrend.map((r) => r.__agg), 1);
   const wpmChartDataWithTrend = wpmDataWithTrend.map((r, i) => ({ ...r, __trend: wpmTrend[i] }));
 
-  // Area distribution trend (avg across area codes per interval, moving average)
   const AREA_CODES_ONLY = ["1.1","1.2","3.1","3.2","3.3","3.4","3.5","4.1"];
   const areaDistTrendVals = areaDistributionData.map((row) => {
     const vals = AREA_CODES_ONLY.map((code) => Number(row[code]) || 0);
@@ -262,16 +233,12 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
       setWpmChartData([]);
       return;
     }
-    // Fetch chunks using the utility function
     const chunks = await fetchChunksByFileIds(fileIds);
     if (chunks.length === 0) {
-      // eslint-disable-next-line no-console
       console.warn("WPM: no chunks found for file IDs", fileIds);
       setWpmChartData([]);
       return;
     }
-    // eslint-disable-next-line no-console
-    console.log("WPM: fetched chunks rows", chunks.length);
 
     // Group by file and find max sequence across all lessons
     const fileIdToSeqToWords = new Map();
@@ -282,7 +249,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
       if (!fileIdToSeqToWords.has(chunk.file_id)) {
         fileIdToSeqToWords.set(chunk.file_id, new Map());
       }
-      // Use word_count and duration_seconds from the schema
       const words = Number(chunk.word_count) || 0;
       const durationSeconds = Number(chunk.duration_seconds) || 300;
       const minutes = durationSeconds > 0 ? durationSeconds / 60 : 5;
@@ -298,7 +264,7 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
 
     const rows = [];
     for (let seq = 1; seq <= maxSeq; seq += 1) {
-      const entry = { interval: seq * 5 }; // minutes (nominal)
+      const entry = { interval: seq * 5 };
       lessons.forEach(({ id, name }) => {
         const wpm = fileIdToSeqToWords.get(id)?.get(seq) ?? 0;
         entry[name] = wpm;
@@ -308,34 +274,22 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
     setWpmChartData(rows);
   }
 
-  // ----------------------
-  // End WPM helpers
-  // ----------------------
-
-  // ----------------------
-  // Area Distribution over time (by chunks)
-  // ----------------------
   async function buildAreaDistributionData() {
     const fileIds = (fileSummaries || []).map((f) => f.file_id).filter(Boolean);
     if (fileIds.length === 0) {
       setAreaDistributionData([]);
       return;
     }
-    // Fetch chunks using the utility function
     const chunks = await fetchChunksByFileIds(fileIds);
     if (chunks.length === 0) {
-      // eslint-disable-next-line no-console
       console.warn("Area Distribution: no chunks found for file IDs", fileIds);
       setAreaDistributionData([]);
       return;
     }
-    // eslint-disable-next-line no-console
-    console.log("Area Distribution: fetched chunks rows", chunks.length);
 
-    // Teaching area codes mapping
     const teachingAreaLabels = {
       "1.1": "Establishing Interaction and rapport",
-      "1.2": "Setting and Maintaining Rules and Routine", 
+      "1.2": "Setting and Maintaining Rules and Routine",
       "3.1": "Activating prior knowledge",
       "3.2": "Motivating learners for learning engagement",
       "3.3": "Using Questions to deepen learning",
@@ -353,7 +307,7 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
       if (!fileIdToSeqToAreas.has(chunk.file_id)) {
         fileIdToSeqToAreas.set(chunk.file_id, new Map());
       }
-      // Parse area_distribution JSON
+      // Parse area_distribution JSON (may be object or string)
       let areaDistribution = {};
       if (chunk.area_distribution && typeof chunk.area_distribution === 'object') {
         areaDistribution = chunk.area_distribution;
@@ -370,29 +324,22 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
     // Build chart rows where x = 5-min interval endpoint (5, 10, ...)
     const rows = [];
     for (let seq = 1; seq <= maxSeq; seq += 1) {
-      const entry = { interval: seq * 5 }; // minutes
-      
+      const entry = { interval: seq * 5 };
+
       // Aggregate all lessons for each teaching area
       Object.keys(teachingAreaLabels).forEach(areaCode => {
         let totalFrequency = 0;
-        
-        // Sum frequencies across all lessons for this teaching area at this interval
         fileIdToSeqToAreas.forEach((seqMap, fileId) => {
           const areaDist = seqMap.get(seq) ?? {};
           totalFrequency += Number(areaDist[areaCode]) || 0;
         });
-        
         entry[areaCode] = totalFrequency;
       });
-      
+
       rows.push(entry);
     }
     setAreaDistributionData(rows);
   }
-
-  // ----------------------
-  // End Area Distribution helpers
-  // ----------------------
 
   function handleAreaToggle(area) {
     setSelectedAreas((prev) =>
@@ -408,14 +355,12 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
     const pageWidth = doc.internal.pageSize.width;
     const margin = 20;
     const chartWidth = pageWidth - (2 * margin);
-    const chartHeight = (pageHeight - (4 * margin)) / 3; // 3 charts per page with margins
-    
-    // Page 1: First 3 charts
+    const chartHeight = (pageHeight - (4 * margin)) / 3;
+
     doc.setFontSize(16);
     doc.text("Teaching Analytics Summary", margin, margin);
     let y = margin + 15;
 
-    // Chart 1: Grouped Bar Chart
     doc.setFontSize(14);
     doc.text("Teaching Area Distribution Across Lessons", margin, y);
     y += 8;
@@ -432,7 +377,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
     }
     y += chartHeight + 10;
 
-    // Chart 2: Total Distribution Bar Chart
     doc.setFontSize(14);
     doc.text("Total Distribution", margin, y);
     y += 8;
@@ -449,7 +393,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
     }
     y += chartHeight + 10;
 
-    // Chart 3: Line Chart
     doc.setFontSize(14);
     doc.text("Utterances per Teaching Area Across Lessons", margin, y);
     y += 8;
@@ -465,11 +408,9 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
       }
     }
 
-    // Page 2: Last 2 charts
     doc.addPage();
     y = margin + 15;
-    
-    // Chart 4: Area Distribution Chart
+
     doc.setFontSize(14);
     doc.text("Lesson Timeline of Utterances", margin, y);
     y += 8;
@@ -486,7 +427,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
     }
     y += chartHeight + 10;
 
-    // Chart 5: WPM Chart
     doc.setFontSize(14);
     doc.text("Average WPM Over Time", margin, y);
     y += 8;
@@ -505,12 +445,10 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
     doc.save("teaching_analytics_summary.pdf");
   }
 
-  // Helper to get the correct value for charts
   function getStatValue(stat, mode) {
     return mode === 'percent' ? (stat?.percent || 0) : (stat?.value || 0);
   }
 
-  // Helper for Y-axis label
   const yAxisTickFormatter = (val) => displayMode === 'percent' ? `${val}%` : val;
   const tooltipFormatter = (val) => displayMode === 'percent' ? `${val}%` : val;
 
@@ -526,7 +464,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
         <h2 className="text-2xl font-bold mb-4 text-center">
           Teaching Analytics Summary
         </h2>
-        {/* Toggle for percent/utterances */}
         <div className="flex justify-center mb-6">
           <div className="inline-flex items-center gap-4 bg-gray-100 px-4 py-2 rounded shadow text-base">
             <label className="flex items-center cursor-pointer">
@@ -557,7 +494,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
           Below are teaching area distributions for all selected lectures, plus
           an overall average.
         </p>
-        {/* Grouped Bar Chart for Teaching Area Distribution */}
         <div className="mb-12">
           <div ref={groupedBarRef} className="w-full bg-white rounded-lg mb-2 p-6">
             <h3 className="text-xl font-bold mb-4 text-center">
@@ -571,14 +507,14 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
                   barCategoryGap={20}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="code" 
-                    tick={{ fontSize: 15, fontWeight: 600 }} 
-                    height={40} 
+                  <XAxis
+                    dataKey="code"
+                    tick={{ fontSize: 15, fontWeight: 600 }}
+                    height={40}
                     interval={0}
                     label={{ value: "Teaching Areas", position: "insideBottom", dy: 10 }}
                   />
-                  <YAxis 
+                  <YAxis
                     tickFormatter={yAxisTickFormatter}
                     label={{ value: displayMode === 'percent' ? "Percentage of Utterances (%)" : "Number of Utterances", angle: -90, position: "insideLeft", dy: 80 }}
                   />
@@ -598,7 +534,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
             </div>
           </div>
         </div>
-        {/* Total Distribution Bar Chart */}
         <div className="mb-12">
           <div ref={totalDistRef} className="w-full bg-white rounded-lg mb-2 p-6">
             <h3 className="text-xl font-bold mb-4 text-center">
@@ -622,7 +557,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
           </div>
         </div>
 
-        {/* Lesson-wise Utterance Line Chart */}
         <div className="mb-12">
           <div ref={lineChartRef} className="w-full bg-white rounded-lg mb-2 p-6">
             <h3 className="text-xl font-bold mb-4 text-center">
@@ -630,9 +564,7 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
             </h3>
             <div className="h-[500px]">
               <div className="flex flex-row w-full h-full">
-                {/* Checkbox legend */}
                 <div className="flex flex-col justify-center items-start pl-4 min-w-[80px] border-r bg-gray-50">
-                  {/* Select All/Unselect All Checkbox */}
                   <label className="flex items-center cursor-pointer select-none text-base font-bold mb-4">
                     <input
                       type="checkbox"
@@ -663,7 +595,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
                     </label>
                   ))}
                 </div>
-                {/* Chart */}
                 <div className="flex-1 h-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
@@ -674,7 +605,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
                       <XAxis dataKey="lesson" tick={{ fontSize: 12, fontWeight: 600, dy: 16 }} angle={0} textAnchor="middle" height={60} interval={0} label={{ value: "Lessons", position: "insideBottom", dy: 25 }} />
                       <YAxis tickFormatter={yAxisTickFormatter} label={{ value: displayMode === 'percent' ? 'Percentage of Utterances (%)' : 'Number of Utterances', angle: -90, position: 'insideLeft', dy: 80 }} />
                       <Tooltip formatter={tooltipFormatter} />
-                      {/* No Legend here, since we have our own */}
                       {TEACHING_AREA_CODES.filter((code) => selectedAreas.includes(code)).map((code, idx) => (
                         <Line key={code} type="linear" dataKey={code} name={code.split(" ")[0]} stroke={LINE_COLORS[idx % LINE_COLORS.length]} strokeWidth={3} dot={{ r: 6, stroke: LINE_COLORS[idx % LINE_COLORS.length], strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 8 }} />
                       ))}
@@ -687,7 +617,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
           </div>
         </div>
 
-        {/* Area Distribution Over Time Chart */}
         <div className="mb-12">
           <div ref={areaDistributionRef} className="w-full bg-white rounded-lg mb-2 p-6">
             <h3 className="text-xl font-bold mb-4 text-center">
@@ -714,7 +643,7 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
                       interval={0}
                       label={{ value: "5-Min Interval (min)", position: "insideBottom", dy: 25 }}
                     />
-                    <YAxis 
+                    <YAxis
                       tickFormatter={(val) => `${val}`}
                       label={{ value: "Frequency of Utterances", angle: -90, position: "insideLeft", dy: 80 }}
                     />
@@ -723,7 +652,7 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
                     {(() => {
                       const teachingAreaLabels = {
                         "1.1": "Establishing Interaction and rapport",
-                        "1.2": "Setting and Maintaining Rules and Routine", 
+                        "1.2": "Setting and Maintaining Rules and Routine",
                         "3.1": "Activating prior knowledge",
                         "3.2": "Motivating learners for learning engagement",
                         "3.3": "Using Questions to deepen learning",
@@ -731,7 +660,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
                         "3.5": "Concluding the lesson",
                         "4.1": "Checking for understanding and providing feedback"
                       };
-                      
                       return Object.keys(teachingAreaLabels).map((areaCode, areaIdx) => (
                         <Bar key={areaCode} dataKey={areaCode} name={areaCode} fill={LINE_COLORS[areaIdx % LINE_COLORS.length]} radius={[4, 4, 0, 0]} />
                       ));
@@ -744,7 +672,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
           </div>
         </div>
 
-                {/* Average Words Per Minute (WPM) Across Lessons */}
         <div className="mb-12">
           <div ref={wpmChartRef} className="w-full bg-white rounded-lg mb-2 p-6">
             <h3 className="text-xl font-bold mb-4 text-center">
@@ -769,7 +696,7 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
                       interval={0}
                       label={{ value: "5-Min Interval (min)", position: "insideBottom", dy: 25 }}
                     />
-                    <YAxis 
+                    <YAxis
                       tickFormatter={(val) => `${val}`}
                       label={{ value: "Average Words Per Minute", angle: -90, position: "insideLeft", dy: 80 }}
                     />
@@ -785,7 +712,6 @@ export default function Modal({ open, onClose, fileSummaries = [] }) {
             )}
           </div>
         </div>
-        {/* Download PDF */}
         <div className="flex justify-center">
           <button
             className="bg-blue-600 text-white px-6 py-2 rounded shadow hover:bg-blue-700 font-semibold"

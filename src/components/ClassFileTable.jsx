@@ -27,11 +27,11 @@ export default function ClassFileTable({
   };
 
   return (
-    <section className="bg-white/95 rounded-2xl shadow-lg border border-blue-100 p-2 md:p-6">
-      {/* Header: Your uploaded class lessons with an icon */}
+    <section className="bg-white/95 dark:bg-gray-800/95 rounded-2xl shadow-lg border border-blue-100 dark:border-blue-900/40 p-2 md:p-6">
+      {/* Header */}
       <div className="flex items-center gap-2 mb-6">
-        <Folder className="text-blue-600 w-8 h-8" /> {/* Folder icon */}
-        <h3 className="text-xl font-bold text-gray-800">
+        <Folder className="text-blue-600 dark:text-blue-400 w-8 h-8" />
+        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
           Your uploaded class lessons
         </h3>
       </div>
@@ -40,15 +40,13 @@ export default function ClassFileTable({
         <input
           type="text"
           placeholder="Filter by class name..."
-          className="border border-blue-200 rounded-lg px-3 py-2 w-full md:w-1/3 focus:ring focus:ring-blue-200"
+          className="border border-blue-200 dark:border-blue-700 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-3 py-2 w-full md:w-1/3 focus:ring focus:ring-blue-200 dark:focus:ring-blue-700"
           value={filterClass}
           onChange={(e) => setFilterClass(e.target.value)}
         />
         <button
           className={`flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-5 py-2 rounded-full font-semibold hover:scale-105 hover:bg-indigo-700 shadow transition
-            ${
-              selectedFiles.length === 0 ? "opacity-60 cursor-not-allowed" : ""
-            }`}
+            ${selectedFiles.length === 0 ? "opacity-60 cursor-not-allowed" : ""}`}
           onClick={handleGoToChatbot}
           disabled={selectedFiles.length === 0}
         >
@@ -56,14 +54,15 @@ export default function ClassFileTable({
           Chatbot ({selectedFiles.length})
         </button>
       </div>
+
       <div className="overflow-x-auto">
         {tableLoading ? (
-          <div className="text-center py-4">Loading files...</div>
+          <div className="text-center py-4 text-gray-500 dark:text-gray-400">Loading files...</div>
         ) : (
           <>
             {/* Desktop Table */}
             <table className="min-w-full text-sm hidden md:table rounded-xl overflow-hidden">
-              <thead className="bg-blue-50">
+              <thead className="bg-blue-50 dark:bg-blue-900/30">
                 <tr>
                   <th className="p-2">
                     <input
@@ -77,17 +76,18 @@ export default function ClassFileTable({
                           ).length
                       }
                       aria-label="Select all files"
+                      className="accent-blue-600"
                     />
                   </th>
-                  <th className="text-left p-2">Class</th>
-                  <th className="text-left p-2">Files</th>
-                  <th className="text-center p-2">Action</th>
+                  <th className="text-left p-2 text-gray-700 dark:text-gray-300">Class</th>
+                  <th className="text-left p-2 text-gray-700 dark:text-gray-300">Files</th>
+                  <th className="text-center p-2 text-gray-700 dark:text-gray-300">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTableData.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="text-center text-gray-400 py-4">
+                    <td colSpan={4} className="text-center text-gray-400 dark:text-gray-500 py-4">
                       No classes found.
                     </td>
                   </tr>
@@ -95,7 +95,7 @@ export default function ClassFileTable({
                   filteredTableData.map((item) => (
                     <tr
                       key={item.class_id}
-                      className="border-b even:bg-blue-50 hover:bg-blue-100 transition"
+                      className="border-b border-gray-100 dark:border-gray-700 even:bg-blue-50 dark:even:bg-blue-900/10 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition text-gray-800 dark:text-gray-200"
                     >
                       <td className="p-2 align-top">
                         <input
@@ -105,6 +105,7 @@ export default function ClassFileTable({
                           )}
                           onChange={(e) => handleClassSelectAll(item, e)}
                           aria-label={`Select all files for ${item.class_name}`}
+                          className="accent-blue-600"
                         />
                       </td>
                       <td className="p-2 font-medium">{item.class_name}</td>
@@ -113,32 +114,29 @@ export default function ClassFileTable({
                           {item.files?.map((file) => (
                             <label
                               key={file.file_id}
-                              className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded"
+                              className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded cursor-pointer"
                             >
                               <input
                                 type="checkbox"
                                 checked={selectedFiles.includes(file.file_id)}
                                 onChange={(e) =>
-                                  handleFileSelection(
-                                    file.file_id,
-                                    e.target.checked
-                                  )
+                                  handleFileSelection(file.file_id, e.target.checked)
                                 }
                                 aria-label={`Select file ${file.stored_filename}`}
+                                className="accent-blue-600"
                               />
                               {file.stored_filename}
                             </label>
-                          )) || <span className="text-gray-400">No files</span>}
+                          )) || <span className="text-gray-400 dark:text-gray-500">No files</span>}
                         </div>
                       </td>
                       <td className="p-2 text-center">
                         <button
                           onClick={() => {
-                            const fileIds =
-                              item.files?.map((file) => file.file_id) || [];
+                            const fileIds = item.files?.map((file) => file.file_id) || [];
                             if (fileIds.length > 0) setSelectedFiles(fileIds);
                           }}
-                          className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-600 hover:text-white shadow transition"
+                          className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-2 py-1 rounded hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white shadow transition"
                           aria-label={`Select all files for ${item.class_name}`}
                         >
                           <Check className="w-3 h-3 inline mr-1" />
@@ -150,27 +148,27 @@ export default function ClassFileTable({
                 )}
               </tbody>
             </table>
+
             {/* Mobile card view */}
             <div className="flex flex-col gap-4 md:hidden">
               {filteredTableData.length === 0 ? (
-                <div className="text-center text-gray-400 py-6">
+                <div className="text-center text-gray-400 dark:text-gray-500 py-6">
                   No classes found.
                 </div>
               ) : (
                 filteredTableData.map((item) => (
                   <div
                     key={item.class_id}
-                    className="bg-blue-50 rounded-xl p-4 shadow flex flex-col gap-2"
+                    className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 shadow flex flex-col gap-2 border border-blue-100 dark:border-blue-800/40"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="font-semibold">{item.class_name}</div>
+                      <div className="font-semibold text-gray-800 dark:text-gray-100">{item.class_name}</div>
                       <button
                         onClick={() => {
-                          const fileIds =
-                            item.files?.map((file) => file.file_id) || [];
+                          const fileIds = item.files?.map((file) => file.file_id) || [];
                           if (fileIds.length > 0) setSelectedFiles(fileIds);
                         }}
-                        className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-600 hover:text-white transition"
+                        className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-2 py-1 rounded hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white transition"
                         aria-label={`Select all files for ${item.class_name}`}
                       >
                         <Check className="w-3 h-3 inline mr-1" />
@@ -181,22 +179,20 @@ export default function ClassFileTable({
                       {item.files?.map((file) => (
                         <label
                           key={file.file_id}
-                          className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded"
+                          className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded cursor-pointer"
                         >
                           <input
                             type="checkbox"
                             checked={selectedFiles.includes(file.file_id)}
                             onChange={(e) =>
-                              handleFileSelection(
-                                file.file_id,
-                                e.target.checked
-                              )
+                              handleFileSelection(file.file_id, e.target.checked)
                             }
                             aria-label={`Select file ${file.stored_filename}`}
+                            className="accent-blue-600"
                           />
                           {file.stored_filename}
                         </label>
-                      )) || <span className="text-gray-400">No files</span>}
+                      )) || <span className="text-gray-400 dark:text-gray-500">No files</span>}
                     </div>
                   </div>
                 ))

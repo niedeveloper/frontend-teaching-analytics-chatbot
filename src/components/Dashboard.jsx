@@ -5,7 +5,7 @@ import { useUser } from "../context/UserContext";
 import { getAuth, signOut } from "firebase/auth";
 import firebaseApp from "../lib/firebase";
 import { supabase } from "../lib/supabaseClient";
-import { MessageSquare, Eye, Download, Play, Clock, FileText, Hash, Calendar, ArrowRight, Loader2, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { MessageSquare, Eye, Play, Clock, FileText, Hash, Calendar, Loader2, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 import * as Tooltip from '@radix-ui/react-tooltip';
 import * as Separator from '@radix-ui/react-separator';
 
@@ -17,6 +17,7 @@ import DataUploadForm from "./DataUploadForm.jsx";
 import ChatHistoryModal from "./ChatHistoryModal.jsx";
 import StorageFilesModal from "./StorageFilesModal.jsx";
 import FileBrowserButton from "./FileBrowserButton.jsx";
+import LessonInsights from "./LessonInsights.jsx";
 
 export default function Dashboard() {
   const { user, setUser } = useUser();
@@ -33,27 +34,18 @@ export default function Dashboard() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [filterClass, setFilterClass] = useState("");
   const [tableLoading, setTableLoading] = useState(false);
-  
-  // Chat history state
   const [chatSessions, setChatSessions] = useState([]);
   const [chatHistoryLoading, setChatHistoryLoading] = useState(false);
   const [selectedChatSession, setSelectedChatSession] = useState(null);
   const [showChatHistoryModal, setShowChatHistoryModal] = useState(false);
   const [fileNamesMap, setFileNamesMap] = useState({});
   const [showStorageFilesModal, setShowStorageFilesModal] = useState(false);
-  
-  // Task status state
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
-  
-  // Expandable sections state
   const [isConversationsExpanded, setIsConversationsExpanded] = useState(false);
   const [isTasksExpanded, setIsTasksExpanded] = useState(false);
-
-  // Ref for ClassFileTable to scroll to
   const classFileTableRef = useRef(null);
 
-  // Data fetching
   useEffect(() => {
     async function fetchDashboardData() {
       if (!user?.email) return;
@@ -91,7 +83,6 @@ export default function Dashboard() {
           lectures: lecturesData?.length || 0,
           chatSessions: chatSessionsCount || 0,
         });
-        console.log("User ID for chat sessions:", userId);
         await fetchTableData(userId);
         await fetchChatSessions(userId);
         await fetchTasks(userId);
@@ -108,31 +99,27 @@ export default function Dashboard() {
   const fetchFileNamesForSessions = async (sessions) => {
     try {
       const allFileIds = [...new Set(sessions.flatMap(session => session.file_ids || []))];
-      
+
       if (allFileIds.length === 0) {
         setFileNamesMap({});
         return;
       }
-      
-      console.log("Fetching file names for IDs:", allFileIds);
-      
+
       const { data: files, error } = await supabase
         .from("files")
         .select("file_id, stored_filename")
         .in("file_id", allFileIds);
-      
+
       if (error) {
         console.error("Error fetching file names:", error);
         return;
       }
-      
-      console.log("Fetched files:", files);
-      
+
       const fileNamesMap = {};
       files.forEach(file => {
         fileNamesMap[file.file_id] = file.stored_filename;
       });
-      
+
       setFileNamesMap(fileNamesMap);
     } catch (err) {
       console.error("Failed to fetch file names:", err);
@@ -150,16 +137,13 @@ export default function Dashboard() {
         .order("lesson_date", { ascending: true })
         .order("lesson_number", { ascending: true });
 
-      // Get unique class_ids from user's files
       const uniqueClassIds = [...new Set(filesData?.map(f => f.class_id) || [])];
-      
-      // Get class names for those class_ids
+
       const { data: classesData } = await supabase
         .from("classes")
         .select("class_id, class_name")
         .in("class_id", uniqueClassIds);
 
-      // Group files by class_id for compatibility with existing UI
       const classesWithFiles = (classesData || []).map(classItem => ({
         ...classItem,
         files: (filesData || []).filter(file => file.class_id === classItem.class_id)
@@ -186,18 +170,15 @@ export default function Dashboard() {
         .eq("user_id", userId)
         .order("started_at", { ascending: false })
         .limit(10);
-      
+
       if (sessionsError) {
         console.error("Error fetching chat sessions:", sessionsError);
         throw sessionsError;
       }
-      
-      console.log("User ID:", userId);
-      console.log("Fetched chat sessions:", sessions);
-      
+
       setChatSessions(sessions || []);
       await fetchFileNamesForSessions(sessions || []);
-      
+
     } catch (err) {
       console.error("Failed to fetch chat sessions:", err);
       setChatSessions([]);
@@ -223,18 +204,17 @@ export default function Dashboard() {
           retry_count,
           metadata
         `)
-        .eq("user_id", userId) // Filter tasks by user_id
+        .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(20);
-      
+
       if (tasksError) {
         console.error("Error fetching tasks:", tasksError);
         throw tasksError;
       }
-      
-      console.log("Fetched tasks:", tasksData);
+
       setTasks(tasksData || []);
-      
+
     } catch (err) {
       console.error("Failed to fetch tasks:", err);
       setTasks([]);
@@ -318,65 +298,62 @@ export default function Dashboard() {
   const getTaskStatusInfo = (status) => {
     switch (status) {
       case 'pending':
-        return { 
-          icon: Clock, 
+        return {
+          icon: Clock,
           color: 'text-yellow-600 bg-yellow-50 border-yellow-200',
           label: 'Pending'
         };
       case 'processing':
-        return { 
-          icon: Loader2, 
+        return {
+          icon: Loader2,
           color: 'text-blue-600 bg-blue-50 border-blue-200',
           label: 'Processing'
         };
       case 'completed':
-        return { 
-          icon: CheckCircle, 
+        return {
+          icon: CheckCircle,
           color: 'text-green-600 bg-green-50 border-green-200',
           label: 'Completed'
         };
       case 'failed':
-        return { 
-          icon: XCircle, 
+        return {
+          icon: XCircle,
           color: 'text-red-600 bg-red-50 border-red-200',
           label: 'Failed'
         };
       default:
-        return { 
-          icon: AlertCircle, 
+        return {
+          icon: AlertCircle,
           color: 'text-gray-600 bg-gray-50 border-gray-200',
           label: 'Unknown'
         };
     }
   };
 
-  // Function to scroll to the ClassFileTable
   const handleFileTextClick = () => {
-    // Scroll to the ClassFileTable
     classFileTableRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Function to open storage files modal
   const handleFileBrowserClick = () => {
     setShowStorageFilesModal(true);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <TopNav userData={userData} handleLogout={handleLogout} />
       <div className="max-w-7xl mx-auto px-2 md:px-8 pt-10 space-y-8">
-        <SummaryCards 
-          summary={summary} 
-          handleFileTextClick={handleFileTextClick} // Pass the function as prop
+        <SummaryCards
+          summary={summary}
+          handleFileTextClick={handleFileTextClick}
         />
-        
-        {/* File Browser Button */}
+
+        <LessonInsights />
+
         <FileBrowserButton onClick={handleFileBrowserClick} />
-        
+
         <DataUploadForm />
         <TrendChart />
 
-        {/* ClassFileTable is always visible */}
         <div ref={classFileTableRef}>
           <ClassFileTable
             filterClass={filterClass}
@@ -390,30 +367,28 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Chat History Section */}
         <Tooltip.Provider>
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-100">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-6 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3 rounded-xl shadow-lg">
                     <MessageSquare className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900">Recent Conversations</h3>
-                    <p className="text-gray-600 mt-1">Your teaching analytics chat history and insights</p>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Recent Conversations</h3>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">Your teaching analytics chat history and insights</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   {chatSessions.length > 0 && (
-                    <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                    <div className="bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-full text-sm font-medium">
                       {chatSessions.length} session{chatSessions.length !== 1 ? 's' : ''}
                     </div>
                   )}
                   <button
                     onClick={() => setIsConversationsExpanded(!isConversationsExpanded)}
-                    className="p-2 text-gray-600 hover:text-gray-800 hover:bg-white rounded-lg transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   >
                     {isConversationsExpanded ? (
                       <ChevronDown className="w-5 h-5" />
@@ -424,12 +399,9 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-            
-            {/* Content */}
+
             {isConversationsExpanded && (
               <div className="p-6">
-
-                {/* Loading State */}
                 {chatHistoryLoading ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <div className="relative">
@@ -441,13 +413,12 @@ export default function Dashboard() {
                   <p className="mt-4 text-gray-600 font-medium">Loading conversations...</p>
                 </div>
               ) : chatSessions.length === 0 ? (
-                /* Empty State */
                 <div className="text-center py-16">
-                  <div className="bg-gray-50 p-6 rounded-2xl inline-block mb-4">
-                    <MessageSquare className="w-12 h-12 text-gray-300 mx-auto" />
+                  <div className="bg-gray-50 dark:bg-gray-700 p-6 rounded-2xl inline-block mb-4">
+                    <MessageSquare className="w-12 h-12 text-gray-300 dark:text-gray-500 mx-auto" />
                   </div>
-                  <h4 className="text-xl font-semibold text-gray-900 mb-2">No conversations yet</h4>
-                  <p className="text-gray-500 mb-4">Start analyzing your teaching data to see conversations here</p>
+                  <h4 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No conversations yet</h4>
+                  <p className="text-gray-500 dark:text-gray-400 mb-4">Start analyzing your teaching data to see conversations here</p>
                   <button
                     onClick={() => router.push('/chatbot')}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -457,20 +428,18 @@ export default function Dashboard() {
                   </button>
                 </div>
               ) : (
-                /* Chat Sessions Grid */
                 <div className="grid gap-4">
                   {chatSessions.map((session) => (
                     <div
                       key={session.session_id}
-                      className="group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-blue-200 transition-all duration-200"
+                      className="group bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl p-6 hover:shadow-lg hover:border-blue-200 dark:hover:border-blue-600 transition-all duration-200"
                     >
-                      {/* Session Header */}
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex-1">
-                          <h4 className="text-lg font-semibold text-gray-900 mb-1">
+                          <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                             Chat Session
                           </h4>
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                          <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                             <div className="flex items-center gap-1">
                               <Calendar className="w-4 h-4" />
                               <span>{formatDate(session.started_at)}</span>
@@ -518,41 +487,37 @@ export default function Dashboard() {
                           </Tooltip.Root>
                         </div>
                       </div>
-                      
+
                       <Separator.Root className="bg-gray-200 h-px w-full mb-4" />
-                      
-                      {/* Session Details */}
+
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {/* Files Analyzed */}
                         <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                          <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                             <FileText className="w-4 h-4" />
                             Files Analyzed
                           </div>
-                          <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                          <div className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-600 p-3 rounded-lg">
                             {getFileNames(session.file_ids) || 'No files selected'}
                           </div>
                         </div>
-                        
-                        {/* Duration */}
+
                         <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                          <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                             <Clock className="w-4 h-4" />
                             Duration
                           </div>
-                          <div className="text-sm text-gray-900 font-medium">
+                          <div className="text-sm text-gray-900 dark:text-white font-medium">
                             {formatDuration(session.started_at, session.ended_at)}
                           </div>
                         </div>
-                        
-                        {/* Messages */}
+
                         <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                          <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                             <MessageSquare className="w-4 h-4" />
                             Messages
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-900 font-medium">
+                            <span className="text-sm text-gray-900 dark:text-white font-medium">
                               {session.conversation?.length || 0} messages
                             </span>
                             {(session.conversation?.length || 0) > 0 && (
@@ -572,30 +537,28 @@ export default function Dashboard() {
           </div>
         </Tooltip.Provider>
 
-        {/* Task Status Section */}
         <Tooltip.Provider>
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 border-b border-gray-100">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-6 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-3 rounded-xl shadow-lg">
                     <Loader2 className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900">Processing Tasks</h3>
-                    <p className="text-gray-600 mt-1">Monitor your file processing status</p>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Processing Tasks</h3>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">Monitor your file processing status</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   {tasks.length > 0 && (
-                    <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                    <div className="bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 px-3 py-1 rounded-full text-sm font-medium">
                       {tasks.length} task{tasks.length !== 1 ? 's' : ''}
                     </div>
                   )}
                   <button
                     onClick={() => setIsTasksExpanded(!isTasksExpanded)}
-                    className="p-2 text-gray-600 hover:text-gray-800 hover:bg-white rounded-lg transition-all duration-200 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                    className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all duration-200 focus:ring-2 focus:ring-green-500 focus:outline-none"
                   >
                     {isTasksExpanded ? (
                       <ChevronDown className="w-5 h-5" />
@@ -606,11 +569,9 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-            
-            {/* Content */}
+
             {isTasksExpanded && (
               <div className="p-6">
-                {/* Loading State */}
                 {tasksLoading ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <div className="relative">
@@ -622,33 +583,30 @@ export default function Dashboard() {
                   <p className="mt-4 text-gray-600 font-medium">Loading tasks...</p>
                 </div>
               ) : tasks.length === 0 ? (
-                /* Empty State */
                 <div className="text-center py-16">
-                  <div className="bg-gray-50 p-6 rounded-2xl inline-block mb-4">
-                    <CheckCircle className="w-12 h-12 text-gray-300 mx-auto" />
+                  <div className="bg-gray-50 dark:bg-gray-700 p-6 rounded-2xl inline-block mb-4">
+                    <CheckCircle className="w-12 h-12 text-gray-300 dark:text-gray-500 mx-auto" />
                   </div>
-                  <h4 className="text-xl font-semibold text-gray-900 mb-2">No processing tasks</h4>
-                  <p className="text-gray-500 mb-4">Upload some audio files to see processing tasks here</p>
+                  <h4 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No processing tasks</h4>
+                  <p className="text-gray-500 dark:text-gray-400 mb-4">Upload some audio files to see processing tasks here</p>
                 </div>
               ) : (
-                /* Tasks Grid */
                 <div className="grid gap-4">
                   {tasks.map((task) => {
                     const statusInfo = getTaskStatusInfo(task.status);
                     const StatusIcon = statusInfo.icon;
-                    
+
                     return (
                       <div
                         key={task.task_id}
-                        className="group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-green-200 transition-all duration-200"
+                        className="group bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl p-6 hover:shadow-lg hover:border-green-200 dark:hover:border-green-600 transition-all duration-200"
                       >
-                        {/* Task Header */}
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex-1">
-                            <h4 className="text-lg font-semibold text-gray-900 mb-1">
+                            <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                               {task.metadata?.filename || task.metadata?.original_filename || 'Unknown File'}
                             </h4>
-                            <div className="flex items-center gap-4 text-sm text-gray-500">
+                            <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                               <div className="flex items-center gap-1">
                                 <Calendar className="w-4 h-4" />
                                 <span>{formatDate(task.created_at)}</span>
@@ -664,41 +622,37 @@ export default function Dashboard() {
                             <span className="text-sm font-medium">{statusInfo.label}</span>
                           </div>
                         </div>
-                        
+
                         <Separator.Root className="bg-gray-200 h-px w-full mb-4" />
-                        
-                        {/* Task Details */}
+
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {/* Subject */}
                           <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                               <FileText className="w-4 h-4" />
                               Subject
                             </div>
-                            <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                            <div className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-600 p-3 rounded-lg">
                               {task.metadata?.subject || 'Unknown Subject'}
                             </div>
                           </div>
-                          
-                          {/* Task Type */}
+
                           <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                               <Loader2 className="w-4 h-4" />
                               Task Type
                             </div>
-                            <div className="text-sm text-gray-900 font-medium">
+                            <div className="text-sm text-gray-900 dark:text-white font-medium">
                               {task.task_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                             </div>
                           </div>
-                          
-                          {/* Retry Count */}
+
                           <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                               <AlertCircle className="w-4 h-4" />
                               Attempts
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-900 font-medium">
+                              <span className="text-sm text-gray-900 dark:text-white font-medium">
                                 {task.retry_count + 1}
                               </span>
                               {task.retry_count > 0 && (
@@ -710,7 +664,6 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {/* Error Message */}
                         {task.error_message && (
                           <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                             <div className="flex items-center gap-2 text-sm font-medium text-red-800 mb-1">
@@ -731,7 +684,6 @@ export default function Dashboard() {
         </Tooltip.Provider>
       </div>
 
-      {/* Chat History Modal */}
       <ChatHistoryModal
         open={showChatHistoryModal}
         onClose={() => setShowChatHistoryModal(false)}
@@ -739,7 +691,6 @@ export default function Dashboard() {
         fileSummaries={selectedChatSession?.files || []}
       />
 
-      {/* Storage Files Modal */}
       <StorageFilesModal
         open={showStorageFilesModal}
         onClose={() => setShowStorageFilesModal(false)}

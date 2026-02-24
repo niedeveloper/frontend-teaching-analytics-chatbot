@@ -17,9 +17,6 @@ import {
   Area,
 } from "recharts";
 
-// -----------------------------
-// Constants
-// -----------------------------
 const TEACHING_AREA_CODES = [
   "1.1 Establishing Interaction and rapport",
   "1.2 Setting and Maintaining Rules and Routine",
@@ -42,9 +39,6 @@ const LINE_COLORS = [
   "#64748b",
 ];
 
-// -----------------------------
-// Helpers
-// -----------------------------
 function parseTeachingAreaStats(summary) {
   const lines = (summary || "").split("\n");
   const stats = {};
@@ -81,11 +75,8 @@ function stripXlsx(filename) {
   return (filename || "").replace(/\.xlsx$/i, "");
 }
 
-// Parse lesson name to create short labels for x-axis
 function parseLessonLabel(filename) {
   if (!filename) return "Unknown";
-  
-  // Remove .xlsx extension if present
   const cleanName = stripXlsx(filename);
   
   // Pattern: Subject_LessonNumber_Date or Subject_LessonNumber-Date
@@ -132,9 +123,6 @@ function getAverageStats(allStats) {
   });
 }
 
-// -----------------------------
-// Component
-// -----------------------------
 export default function TrendChart({ lessonFilter = [] }) {
   const { user } = useUser();
   const [fileSummaries, setFileSummaries] = useState([]);
@@ -145,11 +133,6 @@ export default function TrendChart({ lessonFilter = [] }) {
   const [lessonFilterState, setLessonFilter] = useState(lessonFilter);
   const [wpmChartData, setWpmChartData] = useState([]);
 
-  // ---------------------------------
-  // Fetch
-  // ---------------------------------
-  
-  // Fetch WPM chart data
   const fetchWpmChartData = async (fileSummaries) => {
     try {
       const fileIds = fileSummaries.map((f) => f.file_id).filter(Boolean);
@@ -158,7 +141,6 @@ export default function TrendChart({ lessonFilter = [] }) {
         return;
       }
 
-      // Fetch chunks using the utility function (similar to GraphRenderer)
       const { data: chunks, error: chunksError } = await supabase
         .from("chunks")
         .select("*")
@@ -171,8 +153,6 @@ export default function TrendChart({ lessonFilter = [] }) {
         return;
       }
 
-      console.log("WPM: fetched chunks rows", chunks.length);
-
       // Group by file and find max sequence across all lessons
       const fileIdToSeqToWords = new Map();
       let maxSeq = 0;
@@ -182,7 +162,6 @@ export default function TrendChart({ lessonFilter = [] }) {
         if (!fileIdToSeqToWords.has(chunk.file_id)) {
           fileIdToSeqToWords.set(chunk.file_id, new Map());
         }
-        // Use word_count and duration_seconds from the schema
         const words = Number(chunk.word_count) || 0;
         const durationSeconds = Number(chunk.duration_seconds) || 300;
         const minutes = durationSeconds > 0 ? durationSeconds / 60 : 5;
@@ -246,12 +225,11 @@ export default function TrendChart({ lessonFilter = [] }) {
       const filteredFiles = fileRows.filter(file => {
         const filename = file.stored_filename || '';
         const isAudioFile = /\.(mp3|mp4|wav|m4a)$/i.test(filename);
-        return !isAudioFile; // Exclude audio files
+        return !isAudioFile;
       });
 
       setFileSummaries(filteredFiles);
       
-      // Fetch WPM data if we have files
       if (filteredFiles.length > 0) {
         await fetchWpmChartData(filteredFiles);
       }
@@ -261,9 +239,6 @@ export default function TrendChart({ lessonFilter = [] }) {
     fetchFileSummaries();
   }, [user]);
 
-  // ---------------------------------
-  // Derived data
-  // ---------------------------------
   const lessons = useMemo(
     () =>
       fileSummaries.map((f, idx) => ({
@@ -273,7 +248,6 @@ export default function TrendChart({ lessonFilter = [] }) {
     [fileSummaries]
   );
 
-  // Apply lessonFilter to filter the fileSummaries
   const filteredFileSummaries = useMemo(() => {
     return fileSummaries.filter((file) =>
       lessonFilterState.length === 0 || lessonFilterState.includes(stripXlsx(file.stored_filename))
@@ -333,7 +307,6 @@ export default function TrendChart({ lessonFilter = [] }) {
     return avg.map((a) => ({ code: a.name.split(" ")[0], percent: a.percent }));
   }, [allStats, displayMode]);
 
-  // WPM chart data with lesson filtering
   const chartDataWpm = useMemo(() => {
     if (wpmChartData.length === 0) return [];
     
@@ -358,9 +331,6 @@ export default function TrendChart({ lessonFilter = [] }) {
     });
   }, [wpmChartData, lessonFilterState, filteredFileSummaries]);
 
-  // ---------------------------------
-  // UI handlers
-  // ---------------------------------
   function handleAreaToggle(area) {
     setSelectedAreas((prev) =>
       prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]
@@ -373,7 +343,6 @@ export default function TrendChart({ lessonFilter = [] }) {
     setSelectedAreas([]);
   }
 
-  // Update the filter to handle multiple selections with checkboxes
   function handleLessonFilterChange(e) {
     const { value, checked } = e.target;
     setLessonFilter((prev) =>
@@ -384,7 +353,6 @@ export default function TrendChart({ lessonFilter = [] }) {
   const yTick = (val) => (displayMode === "percent" ? `${val}%` : val);
   const tooltipFmt = (val) => (displayMode === "percent" ? `${val}%` : val);
   
-  // Custom tooltip formatter for line chart to show full lesson names
   const customTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       // Find the full lesson name from the data
@@ -406,14 +374,13 @@ export default function TrendChart({ lessonFilter = [] }) {
   };
 
   return (
-    <section className="rounded-2xl shadow-lg bg-white/90 border border-blue-100 px-2 md:px-6 py-6 flex flex-col items-center">
-      <h2 className="text-indigo-700 font-semibold mb-2 text-lg md:text-xl">
+    <section className="rounded-2xl shadow-lg bg-white/90 dark:bg-gray-800/90 border border-blue-100 dark:border-blue-900/40 px-2 md:px-6 py-6 flex flex-col items-center">
+      <h2 className="text-indigo-700 dark:text-indigo-400 font-semibold mb-2 text-lg md:text-xl">
         Teaching Area Trends
       </h2>
 
-      {/* Lesson Filter (for line and groupedBar chart view) */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
-        <label className="text-xs">Filter Lessons: </label>
+        <label className="text-xs text-gray-600 dark:text-gray-400">Filter Lessons: </label>
         <div className="flex flex-wrap gap-2">
           {lessons.map((lesson, idx) => (
             <label key={idx} className="flex items-center gap-1 text-xs font-bold cursor-pointer select-none">
@@ -430,9 +397,8 @@ export default function TrendChart({ lessonFilter = [] }) {
         </div>
       </div>
 
-      {/* Chart View Switcher */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
-        <div className="inline-flex bg-gray-100 rounded-lg p-1 shadow">
+        <div className="inline-flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1 shadow">
           {[
             { key: "line", label: "Line (by Area across Lessons)" },
             { key: "groupedBar", label: "Grouped Bar (Areas × Lessons)" },
@@ -445,8 +411,8 @@ export default function TrendChart({ lessonFilter = [] }) {
               onClick={() => setChartView(opt.key)}
               className={`px-3 py-1 text-sm font-semibold rounded-md transition-colors ${
                 chartView === opt.key
-                  ? "bg-white text-blue-700"
-                  : "text-gray-700 hover:text-blue-700"
+                  ? "bg-white dark:bg-gray-600 text-blue-700 dark:text-blue-300"
+                  : "text-gray-700 dark:text-gray-300 hover:text-blue-700 dark:hover:text-blue-400"
               }`}
             >
               {opt.label}
@@ -455,10 +421,9 @@ export default function TrendChart({ lessonFilter = [] }) {
         </div>
       </div>
 
-      {/* Toggle for percent/utterances - hide for WPM chart */}
       {chartView !== "wpm" && (
         <div className="flex justify-center mb-4">
-          <div className="inline-flex items-center gap-4 bg-gray-100 px-4 py-2 rounded shadow text-base">
+          <div className="inline-flex items-center gap-4 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded shadow text-base">
             <label className="flex items-center cursor-pointer">
               <input
                 type="radio"
@@ -485,19 +450,18 @@ export default function TrendChart({ lessonFilter = [] }) {
         </div>
       )}
 
-      {/* Area toggles (only for line view, not for WPM) */}
       {chartView === "line" && (
         <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
           <button
             onClick={handleSelectAll}
-            className="px-2 py-1 rounded bg-blue-100 text-blue-700 font-semibold text-xs hover:bg-blue-200"
+            className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold text-xs hover:bg-blue-200 dark:hover:bg-blue-800/60"
             type="button"
           >
             Select All
           </button>
           <button
             onClick={handleClearAll}
-            className="px-2 py-1 rounded bg-gray-100 text-gray-700 font-semibold text-xs hover:bg-gray-200"
+            className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold text-xs hover:bg-gray-200 dark:hover:bg-gray-500"
             type="button"
           >
             Clear All
@@ -520,14 +484,13 @@ export default function TrendChart({ lessonFilter = [] }) {
         </div>
       )}
 
-      {/* Chart Container */}
-      <div className="w-full h-[520px] bg-white border rounded-lg">
+      <div className="w-full h-[520px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg">
         {loading ? (
-          <div className="flex items-center justify-center h-full w-full text-gray-400">
+          <div className="flex items-center justify-center h-full w-full text-gray-400 dark:text-gray-500">
             Loading chart...
           </div>
         ) : fileSummaries.length === 0 ? (
-          <div className="flex items-center justify-center h-full w-full text-gray-400">
+          <div className="flex items-center justify-center h-full w-full text-gray-400 dark:text-gray-500">
             No data found.
           </div>
         ) : chartView === "line" ? (
@@ -671,12 +634,11 @@ export default function TrendChart({ lessonFilter = [] }) {
         )}
       </div>
 
-      {/* Legend block - hide for WPM chart */}
       {chartView !== "wpm" && (
         <div className="w-full mt-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
             {TEACHING_AREA_CODES.map((code, idx) => (
-              <div key={code} className="flex items-center gap-2 text-sm">
+              <div key={code} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                 <span
                   className="inline-block w-4 h-4 rounded"
                   style={{ background: LINE_COLORS[idx % LINE_COLORS.length] }}
