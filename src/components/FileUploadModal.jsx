@@ -5,6 +5,17 @@ import * as Toast from '@radix-ui/react-toast';
 import { supabase } from '../lib/supabaseClient';
 import { useUser } from '../context/UserContext';
 
+const TEACHING_AREAS = [
+  { code: "1.1", name: "Establishing Interaction and rapport" },
+  { code: "1.2", name: "Setting and Maintaining Rules and Routine" },
+  { code: "3.1", name: "Activating prior knowledge" },
+  { code: "3.2", name: "Motivating learners for learning engagement" },
+  { code: "3.3", name: "Using Questions to deepen learning" },
+  { code: "3.4", name: "Facilitating collaborative learning" },
+  { code: "3.5", name: "Concluding the lesson" },
+  { code: "4.1", name: "Checking for understanding and providing feedback" },
+];
+
 const subjectMapping = {
   'English': { code: 'T1', schoolCode: 'N', classId: 1 },
   'Mathematics': { code: 'T2', schoolCode: 'N', classId: 2 },
@@ -31,10 +42,20 @@ export default function FileUploadModal({ isOpen, onClose }) {
     subject: '',
     lessonNumber: '',
     lessonDate: new Date().toISOString().split('T')[0],
-    file: null
+    file: null,
+    focusAreas: []
   });
 
   if (!user?.email) return null;
+
+  const handleFocusAreaToggle = (code) => {
+    setFormData(prev => {
+      const updated = prev.focusAreas.includes(code)
+        ? prev.focusAreas.filter(c => c !== code)
+        : [...prev.focusAreas, code];
+      return { ...prev, focusAreas: updated };
+    });
+  };
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -100,28 +121,32 @@ export default function FileUploadModal({ isOpen, onClose }) {
       const fileName = `${selectedSubject.schoolCode}_${selectedSubject.code}_L${formData.lessonNumber}_${dateString}.${fileExtension}`;
       const filePath = `users/${userId}/${subject}/audio/${fileName}`;
 
-      await supabase.storage.listBuckets();
       setUploadProgress(25);
 
-      const uploadUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/upload/${filePath}`;
-      const response = await fetch(uploadUrl, {
+      const urlRes = await fetch('/api/storage/upload-url', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY}`,
-          'Content-Type': formData.file.type,
-          'Cache-Control': '3600',
-          'x-upsert': 'false'
-        },
-        body: formData.file
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath }),
       });
 
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        throw new Error(`Upload failed with status ${response.status}: ${responseText}`);
+      if (!urlRes.ok) {
+        const err = await urlRes.json();
+        throw new Error(err.error || 'Failed to get upload URL');
       }
 
-      JSON.parse(responseText);
+      const { token } = await urlRes.json();
+
+      const { error: uploadError } = await supabase.storage
+        .from('upload')
+        .uploadToSignedUrl(filePath, token, formData.file, {
+          contentType: formData.file.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
       setUploadProgress(50);
       setUploadProgress(75);
       setUploadProgress(90);
@@ -138,7 +163,8 @@ export default function FileUploadModal({ isOpen, onClose }) {
           school_code: selectedSubject.schoolCode,
           subject_code: selectedSubject.code,
           lesson_number: parseInt(formData.lessonNumber),
-          lesson_date: formData.lessonDate
+          lesson_date: formData.lessonDate,
+          focus_areas: formData.focusAreas.length > 0 ? formData.focusAreas : null
         }
       };
 
@@ -164,7 +190,8 @@ export default function FileUploadModal({ isOpen, onClose }) {
         subject: '',
         lessonNumber: '',
         lessonDate: new Date().toISOString().split('T')[0],
-        file: null
+        file: null,
+        focusAreas: []
       });
 
       if (fileInputRef.current) {
@@ -191,7 +218,8 @@ export default function FileUploadModal({ isOpen, onClose }) {
       subject: '',
       lessonNumber: '',
       lessonDate: new Date().toISOString().split('T')[0],
-      file: null
+      file: null,
+      focusAreas: []
     });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -329,6 +357,39 @@ export default function FileUploadModal({ isOpen, onClose }) {
                     </div>
                   </div>
 
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Focus Areas
+                      </label>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {formData.focusAreas.length === 0 ? 'All areas (default)' : `${formData.focusAreas.length} selected`}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+                      {TEACHING_AREAS.map((area) => (
+                        <label
+                          key={area.code}
+                          className="flex items-start gap-2 cursor-pointer group"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.focusAreas.includes(area.code)}
+                            onChange={() => handleFocusAreaToggle(area.code)}
+                            className="mt-0.5 w-4 h-4 shrink-0 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                          />
+                          <span className="text-xs text-gray-700 dark:text-gray-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 leading-tight">
+                            <span className="font-mono font-semibold text-gray-400 dark:text-gray-500">{area.code} </span>
+                            {area.name}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      Leave unchecked to process all areas equally.
+                    </p>
+                  </div>
+
                   {isUploading && (
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
@@ -391,7 +452,7 @@ export default function FileUploadModal({ isOpen, onClose }) {
 
       <Toast.Provider>
         <Toast.Root
-          className={`fixed top-4 right-4 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 max-w-sm ${
+          className={`fixed top-4 right-4 z-[200] bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 max-w-sm ${
             showSuccessToast ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
           }`}
           open={showSuccessToast}
@@ -407,7 +468,7 @@ export default function FileUploadModal({ isOpen, onClose }) {
 
       <Toast.Provider>
         <Toast.Root
-          className={`fixed top-4 right-4 z-50 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 max-w-sm ${
+          className={`fixed top-4 right-4 z-[200] bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 max-w-sm ${
             showErrorToast ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
           }`}
           open={showErrorToast}
