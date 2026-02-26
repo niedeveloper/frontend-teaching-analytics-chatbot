@@ -60,18 +60,29 @@ export default function StorageFilesModal({ open, onClose }) {
       setLoading(true);
       setError(null);
 
-      const listResponse = await fetch('/api/storage/list', {
+      const listUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/list/upload`;
+      const listResponse = await fetch(listUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path }),
+        headers: {
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ prefix: path, limit: 100, offset: 0 })
       });
 
-      if (!listResponse.ok) {
+      let storageItems = [];
+      let storageError = null;
+
+      if (listResponse.ok) {
+        storageItems = await listResponse.json();
+      } else {
         const errorData = await listResponse.json();
-        throw new Error(`Failed to fetch folder contents: ${errorData.error || 'Unknown error'}`);
+        storageError = { message: `${listResponse.status}: ${errorData.message || 'Unknown error'}` };
       }
 
-      let storageItems = await listResponse.json();
+      if (storageError) {
+        throw new Error(`Failed to fetch folder contents: ${storageError.message}`);
+      }
 
       if (!storageItems) {
         setItems([]);
