@@ -17,97 +17,16 @@ import {
   Area,
 } from "recharts";
 
-const TEACHING_AREA_CODES = [
-  "1.1 Establishing Interaction and rapport",
-  "1.2 Setting and Maintaining Rules and Routine",
-  "3.1 Activating prior knowledge",
-  "3.2 Motivating learners for learning engagement",
-  "3.3 Using Questions to deepen learning",
-  "3.4 Facilitating collaborative learning",
-  "3.5 Concluding the lesson",
-  "4.1 Checking for understanding and providing feedback",
-];
-
-const LINE_COLORS = [
-  "#22c55e",
-  "#2563eb",
-  "#f59e42",
-  "#e11d48",
-  "#a21caf",
-  "#0ea5e9",
-  "#facc15",
-  "#64748b",
-];
-
-function parseTeachingAreaStats(summary) {
-  const lines = (summary || "").split("\n");
-  const stats = {};
-  let inStats = false;
-  for (const line of lines) {
-    if (line.startsWith("TEACHING AREA STATISTICS:")) {
-      inStats = true;
-      continue;
-    }
-    if (inStats) {
-      if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) break;
-      const match = line.match(
-        /^([^.]+\.\d [^:]+): (\d+) utterances \(([\d.]+)%\)/
-      );
-      if (match) {
-        stats[match[1].trim()] = {
-          value: parseInt(match[2], 10),
-          percent: parseFloat(match[3]),
-        };
-      }
-    }
-  }
-  TEACHING_AREA_CODES.forEach((code) => {
-    if (!stats[code]) stats[code] = { value: 0, percent: 0 };
-  });
-  return stats;
-}
+import {
+  TEACHING_AREA_CODES,
+  LINE_COLORS,
+  parseTeachingAreaStats,
+  parseLessonLabel,
+  stripXlsx,
+} from "../lib/teachingConfig";
 
 function getStatValue(stat, mode) {
   return mode === "percent" ? stat?.percent || 0 : stat?.value || 0;
-}
-
-function stripXlsx(filename) {
-  return (filename || "").replace(/\.xlsx$/i, "");
-}
-
-function parseLessonLabel(filename) {
-  if (!filename) return "Unknown";
-  const cleanName = stripXlsx(filename);
-  
-  // Pattern: Subject_LessonNumber_Date or Subject_LessonNumber-Date
-  const match = cleanName.match(/^([^_]+)_Lesson(\d+)[_-](\d{2}-\d{2}-\d{4})/i);
-  
-  if (match) {
-    const [, subject, lessonNum] = match;
-    
-    // Shorten subject names
-    const subjectMap = {
-      'Mathematics': 'Math',
-      'English': 'Eng',
-      'Science': 'Sci',
-      'Social Studies': 'SS',
-      'Geography': 'Geo',
-      'History': 'Hist',
-      'Chemistry': 'Chem'
-    };
-    
-    const shortSubject = subjectMap[subject] || subject.substring(0, 4);
-    return `${shortSubject}_L${lessonNum}`;
-  }
-  
-  // Fallback: try to extract lesson number from any pattern
-  const lessonMatch = cleanName.match(/Lesson(\d+)/i);
-  if (lessonMatch) {
-    return `L${lessonMatch[1]}`;
-  }
-  
-  // Final fallback: use first 8 characters
-  return cleanName.substring(0, 8);
 }
 
 function getAverageStats(allStats) {

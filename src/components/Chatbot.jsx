@@ -8,46 +8,9 @@ import GraphRenderer from "./GraphRenderer";
 import { useUser } from "../context/UserContext";
 import React from "react";
 import { Send, ArrowUp, ArrowDown } from "lucide-react";
+import { TEACHING_AREA_CODES, parseTeachingAreaStats } from "../lib/teachingConfig";
 
 function InlineSummaryTable({ fileSummaries }) {
-  const TEACHING_AREA_CODES = [
-    "1.1 Establishing Interaction and rapport",
-    "1.2 Setting and Maintaining Rules and Routine",
-    "3.1 Activating prior knowledge",
-    "3.2 Motivating learners for learning engagement",
-    "3.3 Using Questions to deepen learning",
-    "3.4 Facilitating collaborative learning",
-    "3.5 Concluding the lesson",
-    "4.1 Checking for understanding and providing feedback",
-  ];
-  function parseTeachingAreaStats(summary) {
-    const lines = summary.split("\n");
-    const stats = {};
-    let inStats = false;
-    for (const line of lines) {
-      if (line.startsWith("TEACHING AREA STATISTICS:")) {
-        inStats = true;
-        continue;
-      }
-      if (inStats) {
-        if (line.trim() === "" || line.startsWith("QUESTION ANALYSIS:")) break;
-        const match = line.match(
-          /^([^.]+\.\d [^:]+): (\d+) utterances \(([^)]+)%\)(?: - (\d+) questions)?/
-        );
-        if (match) {
-          stats[match[1].trim()] = {
-            value: parseInt(match[2], 10),
-            percent: parseFloat(match[3]),
-            questions: match[4] ? parseInt(match[4], 10) : undefined,
-          };
-        }
-      }
-    }
-    TEACHING_AREA_CODES.forEach((code) => {
-      if (!stats[code]) stats[code] = { value: 0, percent: 0, questions: 0 };
-    });
-    return stats;
-  }
   function statsToTable(statsObj) {
     return TEACHING_AREA_CODES.map((code) => ({
       name: code,

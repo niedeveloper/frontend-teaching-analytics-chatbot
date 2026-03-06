@@ -17,7 +17,7 @@ import DataUploadForm from "./DataUploadForm.jsx";
 import ChatHistoryModal from "./ChatHistoryModal.jsx";
 import StorageFilesModal from "./StorageFilesModal.jsx";
 import FileBrowserButton from "./FileBrowserButton.jsx";
-import LessonInsights from "./LessonInsights.jsx";
+// import LessonInsights from "./LessonInsights.jsx";
 
 export default function Dashboard() {
   const { user, setUser } = useUser();
@@ -347,7 +347,7 @@ export default function Dashboard() {
           handleFileTextClick={handleFileTextClick}
         />
 
-        <LessonInsights />
+        {/* <LessonInsights /> */}
 
         <FileBrowserButton onClick={handleFileBrowserClick} />
 

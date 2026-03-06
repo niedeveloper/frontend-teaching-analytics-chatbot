@@ -17,27 +17,12 @@ import {
   Area,
 } from "recharts";
 
-const TEACHING_AREA_CODES = [
-  "1.1 Establishing Interaction and rapport",
-  "1.2 Setting and Maintaining Rules and Routine",
-  "3.1 Activating prior knowledge",
-  "3.2 Motivating learners for learning engagement",
-  "3.3 Using Questions to deepen learning",
-  "3.4 Facilitating collaborative learning",
-  "3.5 Concluding the lesson",
-  "4.1 Checking for understanding and providing feedback",
-];
-
-const LINE_COLORS = [
-  "#22c55e",
-  "#2563eb",
-  "#f59e42",
-  "#e11d48",
-  "#a21caf",
-  "#0ea5e9",
-  "#facc15",
-  "#64748b",
-];
+import {
+  TEACHING_AREA_CODES,
+  LINE_COLORS,
+  parseLessonLabel,
+  stripXlsx,
+} from "../lib/teachingConfig";
 
 function computeMovingAverage(values, windowSize) {
   const res = [];
@@ -50,32 +35,6 @@ function computeMovingAverage(values, windowSize) {
   return res;
 }
 
-function stripXlsx(filename) {
-  return filename.replace(/\.xlsx$/i, "");
-}
-
-function parseLessonLabel(filename) {
-  if (!filename) return "Unknown";
-  const cleanName = stripXlsx(filename);
-  const match = cleanName.match(/^([^_]+)_Lesson(\d+)[_-](\d{2}-\d{2}-\d{4})/i);
-  if (match) {
-    const [, subject, lessonNum] = match;
-    const subjectMap = {
-      'Mathematics': 'Math',
-      'English': 'Eng',
-      'Science': 'Sci',
-      'Social Studies': 'SS',
-      'Geography': 'Geo',
-      'History': 'Hist',
-      'Chemistry': 'Chem'
-    };
-    const shortSubject = subjectMap[subject] || subject.substring(0, 4);
-    return `${shortSubject}_L${lessonNum}`;
-  }
-  const lessonMatch = cleanName.match(/Lesson(\d+)/i);
-  if (lessonMatch) return `L${lessonMatch[1]}`;
-  return cleanName.substring(0, 8);
-}
 
 function GraphRenderer({ graphType, fileIds, messageId, lessonFilter = [], areaFilter = [] }) {
   const [chartData, setChartData] = useState([]);
