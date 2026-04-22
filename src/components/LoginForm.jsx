@@ -96,7 +96,7 @@ export default function LoginForm() {
             Teaching Analytics Chatbot
           </h3>
           <p className="text-base md:text-lg text-gray-600 dark:text-gray-300 mt-2">
-            Ask questions related to your past lessons.
+            Ask questions related to your lessons.
           </p>
         </div>
       </div>
@@ -112,7 +112,7 @@ export default function LoginForm() {
             to:
           </p>
           <ul className="list-disc list-inside text-gray-600 dark:text-gray-300 text-base md:text-lg space-y-2">
-            <li>📊 View past lesson transcripts</li>
+            <li>📊 View lesson transcripts</li>
             <li>🤖 Interact with your lessons using AI Chatbot</li>
             <li>📈 Discover teaching insights and statistics</li>
           </ul>
